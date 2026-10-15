@@ -13,6 +13,13 @@ _SPOKEN_SYMBOLS = frozenset("°")
 # and tag characters.
 _EMOJI_PARTS = re.compile("[\u200d\ufe0e\ufe0f\u20e3\U000e0020-\U000e007f]")
 _ARROWS = re.compile("[\u2190-\u21ff\u27f0-\u27ff\u2900-\u297f\u2b00-\u2bff]")
+# Phonon runs straight through a dash between words but pauses at a comma. A dash is a figure,
+# en, em or two- or three-em dash, a horizontal bar, two or more hyphens, or a hyphen with space
+# on both sides; a hyphen joining words or signing a number is not. An en dash between numbers
+# is a range.
+_RANGE = re.compile(r"(?<=\d)\s*\u2013\s*(?=\d)")
+_DASH = re.compile(r"\s*(?:[\u2012-\u2015\u2e3a\u2e3b]|-{2,}|(?<=\s)-(?=\s|$))\s*")
+_BREAK = "\0"
 
 
 class PlainSpeechTextFilter(BaseTextFilter):
@@ -60,6 +67,18 @@ class PlainSpeechTextFilter(BaseTextFilter):
         )
         text = _ARROWS.sub(" ", text)
         text = re.sub(r"[~|^\\{}\[\]]", " ", text)
+        text = _dashes(text)
         text = re.sub(r"\s+", " ", text)
         # A symbol dropped before punctuation leaves no space in front of it.
         return re.sub(r"\s+([,.;:!?…])", r"\1", text).strip()
+
+
+def _dashes(text: str) -> str:
+    """Speak dashes as commas, and ranges between numbers as "to"."""
+    text = _RANGE.sub(" to ", text)
+    text = _DASH.sub(_BREAK, text)
+    # A dash beside other punctuation, or at either end, adds nothing to say.
+    text = re.sub(f"{_BREAK}+(?=[,.;:!?…])", "", text)
+    text = re.sub(f"(?<=[,.;:!?…]){_BREAK}+", " ", text)
+    text = re.sub(f"^{_BREAK}+|{_BREAK}+$", "", text)
+    return re.sub(f"{_BREAK}+", ", ", text)

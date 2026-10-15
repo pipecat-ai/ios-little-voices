@@ -21,10 +21,18 @@ from support import human, respond, session
         ("The value is 1.5, with a -5 adjustment.", "The value is 1.5, with a -5 adjustment."),
         ("2<3 and 5>=-1.", "2 less than 3 and 5 greater than or equal to -1."),
         ("2<=3 and 5>1.", "2 less than or equal to 3 and 5 greater than 1."),
+        # Phonon pauses at a comma but not at a dash; hyphens inside words and numbers stay.
         (
             "You're welcome — it's on Saturday, September 12.",
-            "You're welcome — it's on Saturday, September 12.",
+            "You're welcome, it's on Saturday, September 12.",
         ),
+        ("One slice—just one—then a walk.", "One slice, just one, then a walk."),
+        ("Skip it – or don't -- or do - your call.", "Skip it, or don't, or do, your call."),
+        ("A lime-green cap, -5 points and 5-a-side.", "A lime-green cap, -5 points and 5-a-side."),
+        ("Rest 5–10 minutes.", "Rest 5 to 10 minutes."),
+        ("Wait — really —?", "Wait, really?"),
+        ("Fine. — Next, you rest —", "Fine. Next, you rest"),
+        ("— And then, — nothing.", "And then, nothing."),
         # Speaker labels from the characters' views, and stage directions, are never read out.
         ("[Angel]: Movement nurtures strength.", "Movement nurtures strength."),
         ("[Me]: Oh, come on, angel!", "Oh, come on, angel!"),
@@ -32,7 +40,7 @@ from support import human, respond, session
         ("[Note: speak now]", ""),
         # Emoji and symbols have no spoken form.
         ("Treat yourself 🍰✨!", "Treat yourself!"),
-        ("Go on 😈 — just this once.", "Go on — just this once."),
+        ("Go on 😈 — just this once.", "Go on, just this once."),
         ("Flags 🇬🇧, keycaps 1️⃣ and families 👨‍👩‍👧 go.", "Flags, keycaps 1 and families go."),
         ("Breathe → relax ~ rest | sleep ♥ dream ★.", "Breathe relax rest sleep dream."),
         ("Hearts ❤️ and thumbs 👍🏽 vanish.", "Hearts and thumbs vanish."),
