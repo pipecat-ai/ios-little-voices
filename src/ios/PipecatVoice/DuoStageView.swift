@@ -90,7 +90,7 @@ final class StageDriver {
     /// Whether the conversation has given the stage anything to show yet; until then, and while
     /// the header and footer are unmeasured, new geometry snaps instead of springing.
     @ObservationIgnored private var engaged = false
-    /// The header and footer have been measured: from then on the intro's geometry springs.
+    /// The header and footer have been measured once: later geometry springs while the intro plays.
     @ObservationIgnored private var measured = false
     /// The stage has drawn its first frame, where the intro begins.
     @ObservationIgnored private var appeared = false

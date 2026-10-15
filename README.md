@@ -98,7 +98,7 @@ xcrun simctl launch --console-pty booted ai.pipecat.voice --preview-duo barge-in
 | `--verify-audience`, `--verify-voice-settings` | Check Audience on Core ML against its reference runtime; print the voices. |
 | `--benchmark-phonon` | Phonon's streaming benchmark (build with `SWIFT_OPTIMIZATION_LEVEL=-O`). |
 | `--stage-pose <pose>` | Holds a settled pose on the stage: `neutral`, `lean-angel`, `lean-devil`, `angel-talking`, `devil-talking`; `--no-captions` hides the captions. |
-| `--stage-script <name>` | Plays a scripted conversation on the stage with synthetic mouths, without the model: `idle`, `handovers`, `interrupt`, `captions` and more. |
+| `--stage-script <name>` | Plays a scripted conversation on the stage with synthetic mouths, without the model: `intro` (the launch intro), `idle`, `handovers`, `interrupt`, `captions` and more. |
 | `--expression-gallery [rNcM]`, `--mouth-sheet` | Shows the faces' expressions, or one of them; every mouth shape. |
 | `--rig-seed N`, `--rig-trace` | Sets the stage's random seed; logs its events and frame rate. |
 | `--lipsync-trace`, `--lipsync-formant-only` | Logs each mouth's frames; shapes the mouths from the sound alone, without the words. |
