@@ -27,7 +27,7 @@ async def test_profile_is_applied_before_initial_prewarm_and_first_generation():
         assert generation["history"] == []
 
 
-async def test_restart_replaces_profile_while_generation_is_pending_and_preserves_history():
+async def test_restart_replaces_profile_while_generation_is_pending_and_starts_afresh():
     async with session(user_name="First Name") as (bridge, host):
         old = await host.say(bridge, "Remember this question")
         marker = len(host.events)
@@ -44,8 +44,8 @@ async def test_restart_replaces_profile_while_generation_is_pending_and_preserve
         notes = session_instructions({"user_name": "Second Name"})
         assert generation["instructions"] == line_instructions("angel", notes)
         assert "First Name" not in generation["instructions"]
-        # The unanswered question is still the human's, just before the new one.
-        assert human(generation) == "Remember this question\nWhat is my name now?"
+        # A new session is a new conversation: the unanswered question is gone.
+        assert human(generation) == "What is my name now?"
 
 
 async def test_each_character_speaks_with_their_own_instructions_and_view():

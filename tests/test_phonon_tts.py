@@ -24,7 +24,7 @@ async def test_speak_requests_carry_each_sentence():
         await host.wait(lambda event: event.get("state") == "listening")
 
 
-async def test_new_session_cancels_old_playback_and_preserves_played_context():
+async def test_new_session_cancels_old_playback_and_starts_afresh():
     async with session() as (bridge, host):
         generation = await host.say(bridge, "Tell me something")
         first = await reply(bridge, host, generation, "Already played. Never completed.")
@@ -52,10 +52,8 @@ async def test_new_session_cancels_old_playback_and_preserves_played_context():
         # The old acknowledgement cannot mark its interrupted sentence played.
         await respond(bridge, second, done=True)
         generation = await host.say(bridge, "Continue")
-        assert plain(generation["history"]) == [
-            {"role": "user", "content": "Tell me something"},
-            {"role": "assistant", "content": "Already played.…"},
-        ]
+        # A new session is a new conversation: nothing from the last one is in the prompt.
+        assert plain(generation["history"]) == []
         speech = await reply(bridge, host, generation, "Phonon continues.")
         assert speech["session"] == "next-session"
         await respond(bridge, speech, done=True)

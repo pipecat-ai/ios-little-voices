@@ -370,7 +370,8 @@ async def test_restarting_session_cancels_old_generation_and_fences_old_audio():
         await host.vad(bridge, 0.95, session=old_session)
         await host.transcribe(bridge, "Old audio", start=0, final=True, session=old_session)
         new = await host.say(bridge, "After restart")
-        assert human(new) == "Before restart\nAfter restart"
+        # A new session is a new conversation: the line from before it is gone.
+        assert human(new) == "After restart"
         assert new["session"] == host.session
         assert new["turn"] != old["turn"]
         assert (

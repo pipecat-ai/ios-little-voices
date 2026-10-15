@@ -326,6 +326,22 @@ async def test_a_new_conversation_forgets_the_room_and_who_opens_a_tie():
         assert human(again) == "Should I skip the gym today?"
 
 
+async def test_ending_a_conversation_and_starting_another_forgets_the_room():
+    async with session() as (bridge, host):
+        host.audience = both_unless_named
+        first = await host.say(bridge, "Should I skip the gym today?")
+        await host.play(bridge, await reply(bridge, host, first, "Go to the gym tonight."))
+        await host.wait(lambda event: event.get("state") == "listening")
+        # Ending the conversation and starting another opens a new session.
+        await bridge.receive({"type": "stop", "session": host.session})
+        host.session = "second"
+        await bridge.receive({"type": "start", "session": host.session})
+        again = await host.say(bridge, "Should I skip the gym today?")
+        assert again["instructions"].startswith("You are the Angel")
+        assert again["history"] == []
+        assert human(again) == "Should I skip the gym today?"
+
+
 async def test_a_later_line_that_fails_ends_the_exchange_once_the_lines_before_it_play():
     async with session(lines=MAX_LINES) as (bridge, host):
         host.audience = both_unless_named

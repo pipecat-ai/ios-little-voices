@@ -432,7 +432,7 @@ native work and playback at once, then sends an `InterruptionFrame` through Pipe
 cancelled results can't complete later requests. Only fully played sentences enter the
 context, which keeps at most 32 turns and 32,000 characters, each human line with its played
 replies. A human line holds at most 2,000 characters. The conversation stays in Python's
-memory until New conversation.
+memory for one session: New conversation clears it, and each new session starts afresh.
 
 After the assistant aggregator commits played text, `prepare_context()` hints the host to
 prewarm a `LanguageModelSession` from that history (`DuoLLMService` prewarms the likely next

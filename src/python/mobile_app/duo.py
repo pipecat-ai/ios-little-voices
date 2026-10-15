@@ -260,17 +260,28 @@ class DuoLLMService(AppleFoundationLLMService):
         self.room = Room()
         self._tie_opener = "angel"
         self._responding = False
+        self._session: str | None = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Forget the conversation when the human clears it, then process as usual."""
         if isinstance(frame, AppleInputFrame) and frame.event.get("type") == "reset_context":
-            self.room = Room()
-            self._tie_opener = "angel"
+            self._forget()
         await super().process_frame(frame, direction)
+
+    def _forget(self) -> None:
+        self.room = Room()
+        self._tie_opener = "angel"
+
+    def _follow_session(self) -> None:
+        """Each session is a new conversation: nothing said in an earlier one carries over."""
+        if self.bridge.session != self._session:
+            self._session = self.bridge.session
+            self._forget()
 
     def prepare_context(self, context: LLMContext) -> None:
         """Prewarm the likely next opener with the conversation up to their last line, which is
         the next request's history."""
+        self._follow_session()
         if self._responding or any(not line.heard for line in self.room.lines):
             return
         opener = self._tie_opener
@@ -326,6 +337,7 @@ class DuoLLMService(AppleFoundationLLMService):
             True when a line after the first failed and the lines before it have played, so the
             exchange ended early; False otherwise.
         """
+        self._follow_session()
         self.room.forget_unheard()
         # The human said it whatever happens next, so it joins the conversation at once.
         said = self.room.add(Line(PLAYER, normalize(text)))
