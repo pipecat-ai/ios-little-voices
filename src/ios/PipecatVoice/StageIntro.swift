@@ -93,13 +93,17 @@ struct StageIntro: Sendable {
         (4.1, .look(.angel, .laughAlong, .laughing, length: 0.7)),
     ]
 
-    /// The intro's length: until its last look ends.
-    static let length = beats.map { time, beat in
+    /// When the logo drops in over the laughing pair and when it leaves, in seconds from the
+    /// start, and how long it takes to slide away.
+    static let logo = (enter: 4.0, leave: 6.0, exit: 0.45)
+
+    /// The intro's length: until its last look ends and the logo has left.
+    static let length = max(beats.map { time, beat in
         switch beat {
         case .pop(_, _, let length), .look(_, _, _, let length), .squish(_, let length): time + length
         case .windUp, .shove, .letGo: time
         }
-    }.max() ?? 0
+    }.max() ?? 0, logo.leave + logo.exit)
 
     /// When the intro started; nil while the faces wait unseen for it.
     private(set) var start: Double?
@@ -134,6 +138,12 @@ struct StageIntro: Sendable {
         next = Self.beats.count
         handedOver = true
         for c in DuoCharacter.allCases { popIn(c, at: t) }
+    }
+
+    /// Whether the logo shows at `t`: not once a conversation has taken over.
+    func showsLogo(at t: Double) -> Bool {
+        guard let start, !handedOver else { return false }
+        return (Self.logo.enter..<Self.logo.leave).contains(t - start)
     }
 
     /// `c`'s pop at `t`.

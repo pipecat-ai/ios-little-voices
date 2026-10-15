@@ -3602,6 +3602,12 @@ extension StageRigChecks {
             if case .shove(let c) = beat.beat { c } else { nil }
         }
         check(shovers == [.devil, .angel], "the devil shoves first and the angel last (\(shovers))")
+        // The logo drops in once the shoving is over, as they make up, holds for 2 s, and the
+        // intro lasts until it has slid away.
+        let lastLetGo = beats.last { if case .letGo = $0.beat { true } else { false } }!.time
+        check(StageIntro.logo.enter > lastLetGo && StageIntro.logo.leave - StageIntro.logo.enter == 2,
+              "the logo drops in after the last shove and holds for 2 s")
+        check(StageIntro.length == StageIntro.logo.leave + StageIntro.logo.exit, "the intro lasts until the logo has left")
         /// The beats of an intro begun at `start` as the gestures they record, on the substeps
         /// they fall on.
         func gestures(from start: Double) -> [StageEventRecord] {
@@ -3650,6 +3656,11 @@ extension StageRigChecks {
                 }
                 let centre = sim.seam.value(at: 0.5)
                 swept = (max(swept.down, centre), min(swept.up, centre))
+                let logo = StageIntro.logo
+                if abs(time - logo.enter) > 0.01, abs(time - logo.leave) > 0.01 {
+                    check(sim.showsLogo == (logo.enter..<logo.leave).contains(time),
+                          "\(label): the logo \(sim.showsLogo ? "shows" : "is gone") at \(time) s")
+                }
                 if time < beats.last!.time {
                     check(sim.needsFrames && sim.activity == .transition,
                           "\(label): the intro runs at the display's rate (\(sim.activity) at \(time) s)")
@@ -3781,6 +3792,7 @@ extension StageRigChecks {
                 }
                 events += drained
                 check(sim.preset.speaker == nil || sim.stageFloor != nil, "\(label): the shover's floor is let go")
+                check(!sim.showsLogo, "\(label): the logo leaves")
                 if time >= start + FacePop.duration {
                     check(sim.intro == nil && frame.picture.faces.angel.pop == FacePop()
                               && frame.picture.faces.devil.pop == FacePop(), "\(label): the intro is over at \(time) s")

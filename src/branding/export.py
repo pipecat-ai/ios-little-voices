@@ -5,7 +5,8 @@ image keeps `splash.png` whole at each screen's width and extends its sky and em
 and below (and, on iPad, its colours to either side), so no screen crops a wing or a tail.
 iPhone images cover 440 x 956 pt, the largest iPhone, at 2x and 3x; the iPad image covers
 1376 x 1376 pt, an iPad Pro 13-inch in either orientation, at 2x. iOS centres the launch
-image without scaling it.
+image without scaling it. The logo, which the launch intro shows, is `logo.png` trimmed to
+its art, on a transparent ground, at 520 pt wide, 2x and 3x.
 
     uv run --no-project --with pillow --with numpy python src/branding/export.py
 """
@@ -13,7 +14,7 @@ image without scaling it.
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent / "ios/PipecatVoice/Assets.xcassets"
@@ -67,6 +68,30 @@ def extend(art: Image.Image, size: tuple[int, int], box: tuple[int, int, int, in
     return Image.fromarray((soft * (1 - mask) + canvas * mask).clip(0, 255).astype(np.uint8))
 
 
+def transparent(art: Image.Image) -> Image.Image:
+    """`art` on a transparent ground. Art that is opaque throughout stands on white: the white
+    reached from its edges becomes transparent, with a soft edge whose colour is unmixed from the
+    white."""
+    rgba = art.convert("RGBA")
+    if rgba.getchannel("A").getextrema()[0] < 255:
+        return rgba
+    rgb = np.asarray(rgba.convert("RGB"), np.float32)
+    # A copy: an image made from an array is read-only, and the flood fill writes to it.
+    near_white = Image.fromarray(((rgb.min(axis=2) >= 232) * 255).astype(np.uint8)).copy()
+    width, height = near_white.size
+    for x, y in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)):
+        if near_white.getpixel((x, y)) == 255:
+            ImageDraw.floodfill(near_white, (x, y), 128)
+    ground = (np.asarray(near_white) == 128).astype(np.float32)
+    blurred = Image.fromarray((ground * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))
+    alpha = 1 - np.asarray(blurred, np.float32) / 255
+    # Where the edge is partly transparent, remove the white it was mixed with.
+    a = np.clip(alpha, 1e-3, 1)[..., None]
+    colour = np.clip((rgb - (1 - a) * 255) / a, 0, 255)
+    pixels = np.dstack([colour, alpha[..., None] * 255]).astype(np.uint8)
+    return Image.fromarray(pixels, "RGBA")
+
+
 def main() -> None:
     icon = Image.open(HERE / "app-icon.png")
     save(
@@ -87,6 +112,13 @@ def main() -> None:
     w = round(art.width * h / art.height)
     image = extend(art, (side, side), ((side - w) // 2, (side - h) // 2, w, h))
     save(image, launch / "LaunchSplash-iPad@2x.png", profile)
+    logo = transparent(Image.open(HERE / "logo.png"))
+    logo = logo.crop(logo.getchannel("A").getbbox())
+    images = ASSETS / "Logo.imageset"
+    for scale in (2, 3):
+        width = 520 * scale
+        size = (width, round(logo.height * width / logo.width))
+        logo.resize(size, Image.LANCZOS).save(images / f"Logo@{scale}x.png", optimize=True)
 
 
 if __name__ == "__main__":

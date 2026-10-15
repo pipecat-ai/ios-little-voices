@@ -17,6 +17,8 @@ struct ConversationView: View {
     @State private var resetWipe: ResetWipeSnapshot?
     /// The launch intro is playing: the microphone fades in once it has.
     @State private var introPlaying = true
+    /// The intro's logo shows.
+    @State private var logoShown = false
 
     private var connecting: Bool { model.loading || model.preparing }
 
@@ -53,6 +55,7 @@ struct ConversationView: View {
                 .accessibilityHidden(true)
             }
         }
+        .overlay { IntroLogo(shown: logoShown) }
         .tint(VoicePalette.blue)
         // No mute tick when ending a conversation clears the mute.
         .sensoryFeedback(.selection, trigger: model.muted) { _, _ in model.active }
@@ -71,9 +74,10 @@ struct ConversationView: View {
         Group {
             #if DEBUG
             DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop, introPlaying: $introPlaying,
-                         pose: stagePose)
+                         logoShown: $logoShown, pose: stagePose)
             #else
-            DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop, introPlaying: $introPlaying)
+            DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop, introPlaying: $introPlaying,
+                         logoShown: $logoShown)
             #endif
         }
         .accessibilityElement(children: .contain)

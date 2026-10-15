@@ -259,3 +259,43 @@ struct ThinkingDots: View {
         .accessibilityHidden(true)
     }
 }
+
+/// The logo over the launch intro (`StageIntro.logo`): it drops in from above with a bounce,
+/// holds in the middle of the screen, then slides back up and fades. Under Reduce Motion it fades
+/// in and out where it rests.
+struct IntroLogo: View {
+    let shown: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The warm cream glow behind it, which sets it apart from the stage.
+    private static let glow = Color(red: 1, green: 0.97, blue: 0.86)
+
+    var body: some View {
+        // It drops in on a bouncy spring, already opaque; it leaves sliding and fading together.
+        let exit = Animation.easeIn(duration: reduceMotion ? 0.3 : StageIntro.logo.exit)
+        let drop = shown ? Animation.spring(response: 0.6, dampingFraction: 0.55) : exit
+        let fade = shown ? Animation.easeOut(duration: reduceMotion ? 0.3 : 0.15) : exit
+        GeometryReader { proxy in
+            let width = min(proxy.size.width * 0.98, 520)
+            ZStack {
+                Ellipse()
+                    .fill(EllipticalGradient(colors: [Self.glow.opacity(0.9), Self.glow.opacity(0.55), Self.glow.opacity(0)],
+                                             center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5))
+                    .frame(width: width * 1.25, height: width * 0.78)
+                Image("Logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: width)
+                    .shadow(color: Self.glow.opacity(0.9), radius: 10)
+            }
+            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            .offset(y: shown || reduceMotion ? 0 : -proxy.size.height)
+            .animation(drop, value: shown)
+            .opacity(shown ? 1 : 0)
+            .animation(fade, value: shown)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}

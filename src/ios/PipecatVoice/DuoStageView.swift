@@ -69,6 +69,8 @@ final class StageDriver {
     private(set) var wakeToken = 0
     /// The launch intro is playing, or about to on the first frame: the microphone waits for it.
     private(set) var introPlaying = true
+    /// The intro's logo shows (`StageIntro.logo`).
+    private(set) var logoShown = false
 
     @ObservationIgnored private var sim: StageSimulation
     @ObservationIgnored private let seed: UInt64
@@ -144,6 +146,7 @@ final class StageDriver {
             || !inputs.captions.isEmpty || !inputs.thinking.isEmpty {
             engaged = true
             if introPlaying { introPlaying = false }
+            if logoShown { logoShown = false }
         }
         sim.receive(inputs, at: (suspendedAt ?? uptime) - offset)
         wake()
@@ -330,7 +333,7 @@ final class StageDriver {
         return running != activity.isRunning || (activity.isRunning && frameInterval != tierInterval)
             || layout != sim.layout || pendingSlots != sim.pendingSlots
             || held != sim.roles.map { CharacterDirector.expression(for: $1) }
-            || introPlaying != simIntroPlaying
+            || introPlaying != simIntroPlaying || logoShown != (sim.showsLogo && !engaged)
     }
 
     /// The simulation's intro is playing and no conversation has taken over the stage.
@@ -352,6 +355,7 @@ final class StageDriver {
         let expressions = sim.roles.map { CharacterDirector.expression(for: $1) }
         if held != expressions { held = expressions }
         if introPlaying != simIntroPlaying { introPlaying = simIntroPlaying }
+        if logoShown != (sim.showsLogo && !engaged) { logoShown = sim.showsLogo && !engaged }
         if activity.isRunning {
             if frameInterval != tierInterval { frameInterval = tierInterval }
             if !running { running = true }
@@ -421,6 +425,8 @@ struct DuoStageView: View {
     let footerTop: CGFloat
     /// Whether the launch intro is playing (`StageDriver.introPlaying`).
     @Binding var introPlaying: Bool
+    /// Whether the intro's logo shows (`StageDriver.logoShown`).
+    @Binding var logoShown: Bool
     #if DEBUG
     /// A settled pose shown instead of the conversation (`--stage-pose`).
     var pose: StagePoseRequest?
@@ -499,6 +505,7 @@ struct DuoStageView: View {
         }
         .onChange(of: mode, initial: true) { _, mode in driver.update(mode: mode) }
         .onChange(of: driver.introPlaying, initial: true) { _, playing in introPlaying = playing }
+        .onChange(of: driver.logoShown, initial: true) { _, shown in logoShown = shown }
         .onChange(of: scenePhase, initial: true) { _, phase in
             driver.scene(active: phase == .active, at: StageDriver.uptime)
         }

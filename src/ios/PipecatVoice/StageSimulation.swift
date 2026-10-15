@@ -295,6 +295,8 @@ struct StageSimulation: Sendable {
     private(set) var moods = PerCharacter<TalkingMood>(angel: .none, devil: .none)
     /// The launch intro, while it plays or the faces wait unseen for it.
     private(set) var intro: StageIntro?
+    /// The intro's logo shows over the stage.
+    var showsLogo: Bool { intro?.showsLogo(at: stepper.time) ?? false }
     /// The intro has begun: it plays once.
     private var introduced = false
     /// Fixed faces for stills (the expression gallery); nil follows the director.

@@ -300,12 +300,14 @@ the angel and peach for the devil, with one soft point toward its speaker.
   devil sets his jaw (`determined`) and shoves, taking the floor as a speaker does: the seam
   hands over to him and the angel is squished against it (she eeps) while he cackles. He lets
   go, the seam is released, and she glares down at him and shoves back, taking the floor in
-  turn while he is squished (he oofs). Without a voice there is no talking, and the idle
-  drift eases out rather than collapsing. A cheeky wink and a giggle later they settle, the
-  angel on top as at launch, about 4.8 s in, and the microphone fades in. A conversation
-  starting meanwhile (`active` or `preparing`, as from a Shortcut) hands over at once: no
-  more beats, anyone unseen pops in, and a shover's floor is let go. It plays once per
-  launch, not on returning from the background, and pauses with the scene. Under Prefer
+  turn while he is squished (he oofs). Without a voice there is no talking, and the idle drift
+  eases out rather than collapsing. As they make up with a cheeky wink and a giggle, the
+  Little Voices logo (`IntroLogo`) drops in from above with a bounce, holds in the middle of
+  the screen for 2 s with a soft glow behind it, and slides back up and fades (under Reduce
+  Motion it fades in and out); once it has gone, about 6.5 s in, the microphone fades in. A
+  conversation starting meanwhile (`active` or `preparing`, as from a Shortcut) hands over at
+  once: no more beats, anyone unseen pops in, and a shover's floor is let go. It plays once
+  per launch, not on returning from the background, and pauses with the scene. Under Prefer
   Cross-Fade Transitions its shoves and releases cross-fade, as a conversation's handovers do.
 - **The speaker's mouth:** the talking face's own mouth is lip sync's rest, a closed smile.
   Taking the floor, the speaker's mouth closes from the listener's on its springs, and lip
