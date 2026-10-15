@@ -67,7 +67,7 @@ final class ConversationScript {
         print("DUO_PREVIEW_SCENARIO: \(scenario.name): \(scenario.summary)")
         print(String(format: "DUO_PREVIEW_CLOCK: %.3f", Date().timeIntervalSince1970))
         monitor.start()
-        while !model.ready { try? await Task.sleep(for: .milliseconds(50)) }
+        await waitForMicrophone(model)
         monitor.moment("idle")
         try? await Task.sleep(for: .seconds(2))
         await tapMicrophone(model, monitor)
@@ -101,6 +101,15 @@ final class ConversationScript {
             }
         case .tapMicrophone:
             await tapMicrophone(model, monitor)
+        case .background(let seconds):
+            monitor.moment("background")
+            monitor.stopping = true
+            model.enterBackground()
+            monitor.check("the conversation ends", !model.active)
+            lines?.expectFreshConversation()
+            try? await Task.sleep(for: .seconds(seconds))
+            monitor.moment("foreground")
+            model.becomeActive()
         case .newConversation:
             monitor.moment("new conversation")
             monitor.stopping = true
@@ -135,12 +144,18 @@ final class ConversationScript {
             model.toggleMute()
             monitor.check(muting ? "the microphone mutes" : "the microphone unmutes", model.muted == muting)
         } else {
+            await waitForMicrophone(model)
             monitor.moment("start")
             monitor.stopping = false
             model.start()
         }
         let ready = await monitor.wait(seconds: 20) { model.active && !model.preparing }
         if !ready { monitor.issue("the microphone never became ready (\(model.error ?? "no error"))") }
+    }
+
+    /// Until the microphone can be tapped: it spins while Python or the models load.
+    private func waitForMicrophone(_ model: ConversationModel) async {
+        while model.loading { try? await Task.sleep(for: .milliseconds(50)) }
     }
 }
 
@@ -155,6 +170,9 @@ struct PreviewScenario {
         case say(String)
         /// The dock's microphone: start a conversation, or mute or unmute it.
         case tapMicrophone
+        /// The app goes to the background, as the conversation sees it, and returns after this
+        /// many seconds.
+        case background(Double)
         /// The New conversation button.
         case newConversation
         /// Until line `n` of the turn starts playing.
@@ -185,7 +203,8 @@ struct PreviewScenario {
     static func named(_ name: String) -> PreviewScenario? { all.first { $0.name == name } }
 
     /// The scenarios, the default first.
-    static let all: [PreviewScenario] = [gym, bargeIn, newConversation, mute, longAndShort, markup, error, debate]
+    static let all: [PreviewScenario] = [gym, bargeIn, newConversation, background, mute, longAndShort, markup,
+                                         error, debate]
 
     static let gym = PreviewScenario(
         name: "gym", summary: "a question for the angel, debated, with verdicts",
@@ -221,6 +240,19 @@ struct PreviewScenario {
                      .says("Hello! I am the angel on your shoulder.")],
             .devil: [.says("Oh, please, Angel! Stay in and have a lie-in. The gym will still be there tomorrow."),
                      .says("And I am the fun one.")],
+        ])
+
+    static let background = PreviewScenario(
+        name: "background", summary: "the app goes to the background between questions, then returns",
+        steps: [.say("Should I call my mum tonight?"), .floor, .background(1.5), .tapMicrophone,
+                .say("Should I bring her flowers?"), .floor],
+        lines: [
+            .angel: [.says("Call her tonight. She would love to hear your voice."),
+                     .says("Devil, five minutes on the phone means the world to her."),
+                     .says("Bring her flowers. Tulips, maybe. She will smile all week.")],
+            .devil: [.says("Text her instead, Angel. Calls take forever."),
+                     .says("Fine, call her. But keep it short."),
+                     .says("Flowers wilt. Bring her cake, and save me a slice.")],
         ])
 
     static let mute = PreviewScenario(
@@ -319,6 +351,8 @@ final class ScriptedMicrophone: SpeechInput {
         let elapsed = clock.duration(to: .now).components
         return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
     }
+
+    func prepare() async {}
 
     func start() async throws {
         if records, !recording {
@@ -452,6 +486,8 @@ final class ScriptedLines: TextGenerator {
 private final class PreviewMonitor {
     private struct Screen: Equatable {
         var active = false, muted = false, preparing = false, playing = false
+        /// The microphone spins before a conversation: Python or the models are loading.
+        var loading = false
         var floor: DuoCharacter?
         var addressed: Set<DuoCharacter> = []
         var captions: [DuoCharacter: String] = [:]
@@ -542,6 +578,7 @@ private final class PreviewMonitor {
         now.active = model.active
         now.muted = model.muted
         now.preparing = model.preparing
+        now.loading = model.loading
         now.playing = view.playing
         now.floor = model.floor
         now.addressed = model.addressed
@@ -615,7 +652,8 @@ private final class PreviewMonitor {
 
     private func describe(_ screen: Screen) -> String {
         var parts: [String] = []
-        parts.append(screen.active ? (screen.preparing ? "starting" : screen.muted ? "mic=muted" : "mic=on") : "idle")
+        parts.append(screen.active ? (screen.preparing ? "starting" : screen.muted ? "mic=muted" : "mic=on")
+            : screen.loading ? "loading" : "idle")
         if screen.playing { parts.append("playing") }
         if let floor = screen.floor { parts.append("floor=\(floor.rawValue)") }
         if !screen.addressed.isEmpty { parts.append("addressed=\(screen.addressed.map(\.rawValue).sorted().joined(separator: ","))") }

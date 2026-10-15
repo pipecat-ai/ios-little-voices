@@ -111,9 +111,8 @@ struct StageColors: Equatable, Sendable {
     var haloLightRadiusFu: Double
     /// A crisp outline replacing the glow under Reduce Transparency.
     var haloOutline: RGBA?
-    /// Wing fill from the hinge outward.
+    /// Wing fill from the hinge out to the tip: palest by the hinge, a warmer cream at the tip.
     var wingFill: [GradientStop]
-    var wingEdge: RGBA
     /// Horn fill, radial from the inner base corner (`HornShape.shadeCenter`) outward: warm
     /// maroon low down to dark brown at the tip.
     var horn: [GradientStop]
@@ -176,9 +175,11 @@ struct StageColors: Equatable, Sendable {
     var chromeGlyph: PerCharacter<RGBA>
     /// The dock's round side buttons, a lighter soft glass inside the dock.
     var dockButton: RGBA
-    /// The microphone button, top to bottom, deepening toward the bottom: teal-green, red while muted.
+    /// The microphone button, top to bottom, deepening toward the bottom: teal-green, red while
+    /// muted, and a warm gray while it loads.
     var micFill: [GradientStop]
     var micMutedFill: [GradientStop]
+    var micLoadingFill: [GradientStop]
     /// The soft light around the microphone button: its halo and the rings rippling from it.
     var micGlow: RGBA
     /// Multiplies ink stroke widths.
@@ -214,9 +215,7 @@ struct StageColors: Equatable, Sendable {
         haloLight: nil,
         haloLightRadiusFu: 160,
         haloOutline: nil,
-        wingFill: [GradientStop(0, RGBA(0xFFFDF4, alpha: 0.92)), GradientStop(1, RGBA(0xFFFBEA, alpha: 0.78))],
-        // A light edge, so the wing reads as cream-white rather than outlined.
-        wingEdge: RGBA(0xFFFFFF, alpha: 0.5),
+        wingFill: [GradientStop(0, RGBA(0xFDFBE9, alpha: 0.94)), GradientStop(1, RGBA(0xFBF5D7, alpha: 0.9))],
         horn: [GradientStop(0, RGBA(0x6E1F12)), GradientStop(0.25, RGBA(0x58190F)), GradientStop(0.5, RGBA(0x3E120B)),
                GradientStop(0.75, RGBA(0x2F0D07)), GradientStop(1, RGBA(0x2A0B06))],
         hornShine: RGBA(0xD65A30),
@@ -249,6 +248,7 @@ struct StageColors: Equatable, Sendable {
         dockButton: RGBA(0xFFE0C4, alpha: 0.38),
         micFill: [GradientStop(0, RGBA(0x36C7A0)), GradientStop(0.5, RGBA(0x19A383)), GradientStop(1, RGBA(0x0B7A62))],
         micMutedFill: [GradientStop(0, RGBA(0xF26A5F)), GradientStop(0.55, RGBA(0xDB4A48)), GradientStop(1, RGBA(0xB22C35))],
+        micLoadingFill: [GradientStop(0, RGBA(0xACA298)), GradientStop(0.5, RGBA(0x8E867E)), GradientStop(1, RGBA(0x6B645D))],
         // Warm light, so the rings glow over the red-orange.
         micGlow: RGBA(0xFFB86A, alpha: 0.45),
         inkStrokeScale: 1,
@@ -277,8 +277,6 @@ struct StageColors: Equatable, Sendable {
         haloLightRadiusFu: 160,
         haloOutline: nil,
         wingFill: [GradientStop(0, RGBA(0xF7EBC8, alpha: 0.8)), GradientStop(1, RGBA(0xF7EBC8, alpha: 0.65))],
-        // The wing edge reuses the wing's top stop.
-        wingEdge: RGBA(0xF7EBC8, alpha: 0.8),
         horn: [GradientStop(0, RGBA(0x4A150C)), GradientStop(0.3, RGBA(0x36100A)), GradientStop(0.6, RGBA(0x220905)),
                GradientStop(1, RGBA(0x1C0704))],
         hornShine: RGBA(0xB8441F),
@@ -312,6 +310,7 @@ struct StageColors: Equatable, Sendable {
         dockButton: RGBA(0xB0582C, alpha: 0.45),
         micFill: [GradientStop(0, RGBA(0x2BB492)), GradientStop(0.55, RGBA(0x1A977A)), GradientStop(1, RGBA(0x0B6E5A))],
         micMutedFill: [GradientStop(0, RGBA(0xDA5850)), GradientStop(0.55, RGBA(0xBF3E3F)), GradientStop(1, RGBA(0x962530))],
+        micLoadingFill: [GradientStop(0, RGBA(0x968D84)), GradientStop(0.55, RGBA(0x7A726A)), GradientStop(1, RGBA(0x58514B))],
         micGlow: RGBA(0xFFD9B0, alpha: 0.24),
         inkStrokeScale: 1,
         seamLine: nil,
@@ -357,7 +356,6 @@ struct StageColors: Equatable, Sendable {
         let atSeam = PerCharacter(angel: Self.sample(angelHalf, at: 0.55), devil: Self.sample(devilHalf, at: 0.3))
         let wing = RGBA(dark ? 0xE8DCB8 : 0xFFF7E1)
         colors.wingFill = [GradientStop(0, wing), GradientStop(1, wing)]
-        colors.wingEdge = Self.composite(wingEdge, over: wing)
         colors.haloGlow = nil
         colors.haloLight = nil
         colors.haloOutline = RGBA(0xE8C35A)

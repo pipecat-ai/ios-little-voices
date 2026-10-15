@@ -16,7 +16,7 @@ struct ConversationView: View {
     /// The screen New conversation is wiping away.
     @State private var resetWipe: ResetWipeSnapshot?
 
-    private var connecting: Bool { !model.ready || model.preparing }
+    private var connecting: Bool { model.loading || model.preparing }
 
     init(model: ConversationModel) {
         self.model = model

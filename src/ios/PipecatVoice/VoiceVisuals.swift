@@ -129,7 +129,9 @@ struct MicrophoneControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let diameter: CGFloat = 76
-    private var fill: [GradientStop] { muted ? palette.colors.micMutedFill : palette.colors.micFill }
+    private var fill: [GradientStop] {
+        connecting ? palette.colors.micLoadingFill : muted ? palette.colors.micMutedFill : palette.colors.micFill
+    }
     private var listening: Bool { active && !muted && !connecting }
     private var title: String {
         connecting ? "Connecting" : !active ? "Start conversation" : muted ? "Unmute microphone" : "Mute microphone"
@@ -170,6 +172,7 @@ struct MicrophoneControl: View {
             : muted ? "Turns your microphone back on." : "Pauses your microphone.")
         .accessibilityShowsLargeContentViewer { Label(title, systemImage: muted ? "mic.slash.fill" : "mic.fill") }
         .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: muted)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: connecting)
     }
 }
 

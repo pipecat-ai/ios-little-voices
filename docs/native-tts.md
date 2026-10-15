@@ -21,6 +21,9 @@ Rust library around Gradium's open-source `ptts` runtime (0.4.0-rc.1):
   its stream, cancellation and completion.
 - `unload()` waits for the runtime, so a model still running is never released.
 
+The app loads the model as it comes to the front, keeps it between conversations, and frees it
+in the background.
+
 The runtime normalizes text as English, runs the q8 weights on the CPU with a fixed seed (42)
 and `ptts`'s default temperature (0.3), and rejects requests over 600 characters; the sentence
 aggregator ahead of it limits requests to 420. Text that normalizes to nothing gives no audio,
@@ -99,6 +102,7 @@ Debug builds accept these launch arguments; Release builds compile none of them 
   | `gym` (default) | "Angel, should I go to the gym tonight?", debated, with verdicts. |
   | `barge-in` | The human cuts in while the devil speaks. |
   | `new-conversation` | New conversation mid-line, then a fresh conversation. |
+  | `background` | The app goes to the background between questions; back in front, it loads the models again and a fresh conversation starts. |
   | `mute` | Muting and unmuting mid-line, with speech while muted. |
   | `long-and-short` | One-word greetings, then a six-sentence line and a one-word reply. |
   | `markup` | Emoji, Markdown and odd punctuation, and lines with nothing to say aloud. |

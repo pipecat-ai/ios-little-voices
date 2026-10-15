@@ -101,7 +101,6 @@ enum AngelGeometry {
     static let wingBoxMax = Vec2(-124, 72)
     /// The hinge (root) the wing swings about.
     static let wingHinge = Vec2(-127, 52)
-    static let wingTopLobe = FaceCircle(center: Vec2(-160, 2), radius: 18)
 
     /// The face's extent at rest, including the halo glow.
     static let layoutBoxMin = Vec2(-178, -150)
