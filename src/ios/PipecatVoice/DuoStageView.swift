@@ -90,6 +90,12 @@ final class StageDriver {
     /// Whether the conversation has given the stage anything to show yet; until then, and while
     /// the header and footer are unmeasured, new geometry snaps instead of springing.
     @ObservationIgnored private var engaged = false
+    /// The header and footer have been measured: from then on the intro's geometry springs.
+    @ObservationIgnored private var measured = false
+    /// The stage has drawn its first frame, where the intro begins.
+    @ObservationIgnored private var appeared = false
+    /// The launch intro has begun on a stage: it plays once per launch.
+    private static var introduced = false
     /// The frame interval the next publish applies, and since when a slower tier has been asked
     /// for: the stage only slows after asking for 0.3 s, so the tier never flickers.
     @ObservationIgnored private var tierInterval: Double?
@@ -155,11 +161,13 @@ final class StageDriver {
 
     /// New geometry: the layout is solved again. Geometry that arrives while the screen is
     /// still being measured (`provisional`), or before the conversation shows anything, snaps
-    /// into place; later changes, such as the error banner, spring.
+    /// into place; later changes, such as the error banner, spring, as do changes after the
+    /// measurement while the intro plays, so it never jumps.
     func update(metrics: StageMetrics, provisional: Bool) {
         guard metrics != self.metrics else { return }
         self.metrics = metrics
-        resolve(snap: provisional || !engaged)
+        resolve(snap: provisional || (!engaged && !(measured && sim.intro != nil)))
+        if !provisional { measured = true }
     }
 
     /// A caption bubble's measured height: rounded to 4 pt, and kept unless it moves by more
@@ -225,11 +233,40 @@ final class StageDriver {
         }
     }
 
+    // MARK: Intro
+
+    /// The first frame introduces the characters, once per launch. In DEBUG a `--stage-pose`
+    /// shows no intro, and a `--stage-script` holds the faces unseen for its own cue
+    /// (`StageScript.intro`), or shows none.
+    private func introduce(at uptime: Double) {
+        guard still == nil, !Self.introduced else { return }
+        #if DEBUG
+        if StageDebug.stagePose != nil { return }
+        if let request = StageDebug.stageScript {
+            if request.script.intro != nil { sim.awaitIntro() }
+            return
+        }
+        #endif
+        Self.introduced = true
+        sim.beginIntro(at: (suspendedAt ?? uptime) - offset)
+    }
+
+    #if DEBUG
+    /// Plays the intro from `uptime`, on a `--stage-script`'s cue.
+    func beginIntro(at uptime: Double) {
+        guard still == nil else { return }
+        Self.introduced = true
+        sim.beginIntro(at: (suspendedAt ?? uptime) - offset)
+        wake()
+    }
+    #endif
+
     // MARK: Frames
 
     /// The frame for `uptime`: the simulation advanced in fixed substeps with this frame's
     /// mouths. A hitch longer than 0.1 s slows the stage rather than jumping it. The first
-    /// frame adopts `metrics` at once, so nothing is ever drawn at placeholder positions.
+    /// frame adopts `metrics` at once, so nothing is ever drawn at placeholder positions, and
+    /// begins the intro.
     func frame(at uptime: Double, metrics: StageMetrics, mouths: FrameMouths, userLevel: Double?) -> StageFrame {
         if self.metrics == nil {
             self.metrics = metrics
@@ -240,6 +277,10 @@ final class StageDriver {
                 sim.settleAll()
                 schedulePublish()
             }
+        }
+        if !appeared {
+            appeared = true
+            introduce(at: uptime)
         }
         guard still == nil, suspendedAt == nil else { return sim.frame }
         if let last = lastFrameUptime, uptime - last > 0.1 { offset += uptime - last - 0.1 }
@@ -505,6 +546,7 @@ struct DuoStageView: View {
         let script = request.script
         StageDebug.log(String(format: "STAGE_SCRIPT_START: %@ seed %llu, %.1f s", request.name, StageDebug.seed,
                               script.duration))
+        if let intro = script.intro { driver.beginIntro(at: start + intro) }
         var marks = script.marks[...]
         for step in script.steps {
             let due = start + step.time
@@ -521,6 +563,12 @@ struct DuoStageView: View {
                                   step.inputs.floor?.rawValue ?? "-",
                                   step.inputs.talking.map(\.rawValue).sorted().joined(separator: "+"),
                                   step.inputs.captions.count))
+        }
+        for mark in marks {
+            let delay = start + mark.time - StageDriver.uptime
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard !Task.isCancelled else { return }
+            StageDebug.log(String(format: "STAGE_SCRIPT: %.3f %@", mark.time, mark.label))
         }
         let rest = start + script.duration - StageDriver.uptime
         if rest > 0 { try? await Task.sleep(for: .seconds(rest)) }

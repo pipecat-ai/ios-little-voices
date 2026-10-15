@@ -40,6 +40,10 @@ enum StageGesture: String, Sendable {
     case curious
     case wink
     case cheekyWink
+    /// The launch intro's: popping in, shoving the other along the seam, and being shoved.
+    case popIn
+    case shove
+    case squish
 }
 
 /// What role resolution and the agenda read.
@@ -661,6 +665,15 @@ struct CharacterDirector: Sendable {
     }
 
     mutating func startPeek(at t: Double) { peekStart = t }
+
+    /// Starts one of the launch intro's looks at `t`: `expression` for `length` s on the reaction
+    /// layer, at the other character or, unless `atOther`, the human. `gesture` names it.
+    mutating func perform(_ gesture: StageGesture, _ expression: FaceExpression, at t: Double, for length: Double,
+                          atOther: Bool) {
+        started.removeAll(keepingCapacity: true)
+        begin(Overlay(gesture: gesture, start: t, until: t + length, expression: expression,
+                      gaze: atOther ? lookAtOther : .zero), at: t)
+    }
 
     // MARK: Hearing
 

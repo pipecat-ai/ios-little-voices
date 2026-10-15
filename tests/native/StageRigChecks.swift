@@ -41,6 +41,7 @@ enum StageRigChecks {
         behaviour(); sections.append("behaviour")
         stress(); sections.append("seeded stress")
         smoothness(); sections.append("smoothness")
+        intro(); sections.append("intro")
         timing()
         print("STAGE_RIG_CHECKS_PASSED: \(sections.joined(separator: ", "))")
     }
@@ -3115,15 +3116,18 @@ private struct FrameDrives: MouthSource {
 extension StageRigChecks {
     /// Plays `script` as the app does: frames at `hz`, each step delivered at its time, each
     /// frame's mouths sampled once, a frame ahead, and the bubbles' and the pill's heights
-    /// measured as their text changes. `each` sees every frame.
+    /// measured as their text changes; with `intro`, the launch intro begins at 0. `each` sees
+    /// every frame.
     @discardableResult
     private static func perform(_ script: StageScript, seed: UInt64, metrics m: StageMetrics = .iPhone18Pro,
                                 mode: StageMode = StageMode(), hz: Double = 120, until end: Double? = nil,
+                                intro: Bool = false,
                                 each: (Double, StageFrame, inout StageSimulation) -> Void) -> StageSimulation {
         var sim = StageSimulation(seed: seed, metrics: m, mode: mode)
         var heights: [DuoCharacter: Double] = [:], pill = 0.0
         sim.update(metrics: m, bubbleHeights: heights, pillHeight: pill)
         sim.settleAll()
+        if intro { sim.beginIntro(at: 0) }
         var next = 0
         let frames = Int(((end ?? script.duration) * hz).rounded())
         for k in 1...frames {
@@ -3480,5 +3484,440 @@ extension StageRigChecks {
             widest = max(widest, frame.picture.faces.angel.reopen, frame.picture.faces.devil.reopen)
         }
         check(widest > 1.03, "a blink reopens past rest (\(widest))")
+    }
+}
+
+// MARK: - Intro
+
+extension StageRigChecks {
+    /// Watches a run frame by frame as the stress and smoothness checks do: every frame keeps its
+    /// invariants; no landmark or seam sample jumps (over 3 pt in a frame and over four times as
+    /// far as in the frames either side); no face pops in faster than 20 of its sizes a second;
+    /// and a face in sight never jumps its mouth (12 fu) or its laugh's bob and shake, each per
+    /// 1/120 s.
+    private struct SmoothWatch {
+        let label: String
+        let metrics: StageMetrics
+        private var last: (time: Double, points: [Vec2], faces: PerCharacter<FacePose>)?
+        private var steps: [[Double]] = []
+        private(set) var jumpsChecked = 0
+
+        init(_ label: String, metrics: StageMetrics) {
+            self.label = label
+            self.metrics = metrics
+        }
+
+        mutating func see(_ frame: StageFrame, at time: Double) {
+            let m = metrics
+            let at = "\(label) at \(String(format: "%.3f", time)) s"
+            StageRigChecks.checkInvariants(frame, metrics: m, at)
+            let seam = frame.picture.seam.enumerated().map { Vec2(m.x(Double($0.offset) / 48), m.y($0.element)) }
+            let points = DuoCharacter.allCases.flatMap { StageRigChecks.landmarks(frame.picture.faces[$0]) } + seam
+            if let last {
+                steps.append(zip(points, last.points).map { ($0 - $1).length })
+                if steps.count == 3 {
+                    let (before, step, after) = (steps[0], steps[1], steps[2])
+                    for i in step.indices where step[i] > 3 && step[i] > 4 * max(before[i], after[i]) + 0.5 {
+                        check(false, "\(at): landmark \(i) jumped \(step[i]) pt in the frame before "
+                            + "(\(before[i]) and \(after[i]) either side)")
+                    }
+                    jumpsChecked += 1
+                    steps.removeFirst()
+                }
+                // The frame's length in 120ths of a second.
+                let frames = max(1, (time - last.time) * 120)
+                for c in DuoCharacter.allCases {
+                    let a = last.faces[c], b = frame.picture.faces[c]
+                    check(abs(b.pop.size - a.pop.size) <= 20 * (time - last.time) + 1e-9,
+                          "\(at): \(c) pops from \(a.pop.size) to \(b.pop.size) in a frame")
+                    guard a.pop.size > 0, b.pop.size > 0 else { continue }
+                    let (was, now) = (a.features.mouth, b.features.mouth)
+                    check(abs(now.open - was.open) <= 12 * frames && abs(now.width - was.width) <= 12 * frames,
+                          "\(at): \(c)'s mouth jumps from \(was.open) × \(was.width) to \(now.open) × \(now.width)")
+                    check(abs(b.bob - a.bob) <= 0.8 * frames
+                              && abs(b.shake - a.shake) <= 1.5 * Double.pi / 180 * frames,
+                          "\(at): \(c)'s laugh jumps (bob \(a.bob) → \(b.bob), shake \(a.shake) → \(b.shake))")
+                }
+            }
+            last = (time, points, frame.picture.faces)
+        }
+    }
+
+    /// The gestures only the intro starts here: with no conversation, nothing else pops in,
+    /// shoves, squishes, cackles, huffs or winks, and the idle stage's first glance is 8 s off.
+    private static let introGestures: Set<StageGesture> = [.popIn, .glance, .laughAlong, .shove, .squish, .huff,
+                                                           .cheekyWink]
+
+    private static func isIntroGesture(_ record: StageEventRecord) -> Bool {
+        if case .gesture(_, let gesture) = record.event { introGestures.contains(gesture) } else { false }
+    }
+
+    /// A stage settled at rest that begins the intro at 0, on `metrics` in `mode`.
+    private static func introduced(seed: UInt64, metrics m: StageMetrics = .iPhone18Pro,
+                                   mode: StageMode = StageMode()) -> StageSimulation {
+        var sim = StageSimulation(seed: seed, metrics: m, mode: mode)
+        sim.update(metrics: m, bubbleHeights: [:], pillHeight: 0)
+        sim.settleAll()
+        sim.beginIntro(at: 0)
+        return sim
+    }
+
+    // MARK: Intro
+
+    /// The launch intro (`StageIntro`): the faces start unseen and pop in past full size,
+    /// stretching tall and squashing wide; they notice each other and shove each other along the
+    /// seam, each coming on top as it bows into the other's half and the other squished and
+    /// pushed away; then they make up and settle into the idle stage, the angel on top as at
+    /// launch, in 2.5–4 s. It never jumps, on any device or at any cadence, and replays exactly; a
+    /// conversation starting at any moment hands it over smoothly; it plays once and pauses with
+    /// the scene; and under Reduce Motion the faces fade in, unmoving.
+    static func intro() {
+        let m = StageMetrics.iPhone18Pro
+        let beats = StageIntro.beats
+
+        // The choreography: in order and 2.5–4 s long; the devil starts the shoving and the angel
+        // has the last shove.
+        check(zip(beats, beats.dropFirst()).allSatisfy { $0.time <= $1.time }, "the intro's beats are in order")
+        let length = beats.map { time, beat -> Double in
+            switch beat {
+            case .pop(_, _, let length), .look(_, _, _, let length), .squish(_, let length): time + length
+            case .windUp, .shove, .letGo: time
+            }
+        }.max()!
+        check((2.5...4).contains(length), "the intro lasts \(length) s")
+        let shovers = beats.compactMap { beat -> DuoCharacter? in
+            if case .shove(let c) = beat.beat { c } else { nil }
+        }
+        check(shovers == [.devil, .angel], "the devil shoves first and the angel last (\(shovers))")
+        /// The beats of an intro begun at `start` as the gestures they record, on the substeps
+        /// they fall on.
+        func gestures(from start: Double) -> [StageEventRecord] {
+            beats.compactMap { time, beat in
+                let at = Double(FixedStepper.index(atOrAfter: start + time)) / FixedStepper.rate
+                return switch beat {
+                case .pop(let c, _, _): StageEventRecord(time: at, event: .gesture(c, .popIn))
+                case .look(let c, let gesture, _, _): StageEventRecord(time: at, event: .gesture(c, gesture))
+                case .shove(let c): StageEventRecord(time: at, event: .gesture(c, .shove))
+                case .squish(let c, _): StageEventRecord(time: at, event: .gesture(c, .squish))
+                case .windUp, .letGo: nil
+                }
+            }
+        }
+        let expected = gestures(from: 0)
+        let pops = beats.compactMap { time, beat -> (DuoCharacter, Double)? in
+            if case .pop(let c, _, _) = beat { (c, time) } else { nil }
+        }
+        check(pops.map(\.0) == [.angel, .devil], "the angel pops in, then the devil")
+
+        // The timeline, on a dozen seeds.
+        for seed in UInt64(1)...12 {
+            let label = "intro seed \(seed)"
+            var watch = SmoothWatch(label, metrics: m)
+            var events: [StageEventRecord] = []
+            var seen = PerCharacter<Double?>(angel: nil, devil: nil)
+            var peak = PerCharacter(angel: 0.0, devil: 0.0)
+            var tallest = PerCharacter(angel: 1.0, devil: 1.0), widest = PerCharacter(angel: 1.0, devil: 1.0)
+            var bowed = (down: 0.0, up: 0.0)
+            var pushed = PerCharacter(angel: 0.0, devil: 0.0)
+            let run = perform(StageScript(duration: 6), seed: seed, until: 5.9, intro: true) { time, frame, sim in
+                watch.see(frame, at: time)
+                events += sim.drainEvents()
+                for c in DuoCharacter.allCases {
+                    let pose = frame.picture.faces[c]
+                    if time < pops[0].1 { check(pose.pop == .unseen, "\(label): \(c) is unseen at \(time) s") }
+                    if pose.pop.size > 0, seen[c] == nil { seen[c] = time }
+                    peak[c] = max(peak[c], pose.pop.size)
+                    tallest[c] = max(tallest[c], pose.pop.squash)
+                    widest[c] = min(widest[c], pose.pop.squash)
+                    // How far the face rode away from the seam: the devil down, the angel up.
+                    let rode = pose.anchor.y - sim.layout[c].anchor.y
+                    pushed[c] = max(pushed[c], c == .devil ? rode : -rode)
+                }
+                bowed = (max(bowed.down, sim.seam.shove.value), min(bowed.up, sim.seam.shove.value))
+                if time < beats.last!.time {
+                    check(sim.needsFrames && sim.activity == .transition,
+                          "\(label): the intro runs at the display's rate (\(sim.activity) at \(time) s)")
+                }
+            }
+            for (c, time) in pops {
+                check(seen[c].map { $0 > time && $0 <= time + 1.0 / 120 + 1e-9 } == true,
+                      "\(label): \(c) appears at \(seen[c] ?? -1) s, popping in at \(time) s")
+                check(peak[c] > 1.15 && peak[c] < 1.25, "\(label): \(c) pops in past full size (\(peak[c]))")
+                check(tallest[c] > 1.08 && widest[c] < 0.97,
+                      "\(label): \(c) stretches tall (\(tallest[c])) and squashes wide (\(widest[c])) popping in")
+            }
+            check(events.filter(isIntroGesture) == expected,
+                  "\(label): the beats' gestures \(events.filter(isIntroGesture).map { "\($0.time) \($0.event)" })")
+            let flips = events.compactMap { record -> DuoCharacter? in
+                if case .flipped(let c) = record.event { c } else { nil }
+            }
+            check(flips == [.devil, .angel], "\(label): each shover comes on top (\(flips))")
+            check(bowed.down >= 0.06 && bowed.up <= -0.06,
+                  "\(label): the shoves bow the seam into each half (\(bowed))")
+            check(pushed.devil >= 10 && pushed.angel >= 10, "\(label): each shoved face is pushed away (\(pushed))")
+            check(watch.jumpsChecked > 600, "\(label): \(watch.jumpsChecked) frames watched")
+
+            // Over, the faces rest as they would without the intro, the angel on top, and the seam
+            // rests in its shape, only the idle drift flowing on it.
+            let plain = perform(StageScript(duration: 6), seed: seed, until: 5.9) { _, _, _ in }
+            check(run.intro == nil && run.frame.picture.dominant == .angel,
+                  "\(label): the intro is over, the angel on top")
+            check(run.roles == plain.roles && run.activity != .transition,
+                  "\(label): the stage idles (\(run.activity))")
+            for c in DuoCharacter.allCases {
+                let a = run.frame.picture.faces[c], b = plain.frame.picture.faces[c]
+                check(a.pop == FacePop() && run.directors[c].overlay == nil, "\(label): \(c)'s looks are over")
+                near(a.anchor, b.anchor, 0.5, "\(label): \(c) settles where it rests")
+                near(a.scale, b.scale, 1e-3, "\(label): \(c)'s settled scale")
+                near(a.sy, b.sy, 2e-3, "\(label): \(c)'s settled squash")
+                near(a.tilt, b.tilt, 1e-3, "\(label): \(c)'s settled tilt")
+            }
+            check(run.seam.isMotionSettled && run.seam.shape == run.layout.seam && abs(run.seam.shove.value) < 1e-4
+                      && run.seam.rippleMagnitude < 1e-4, "\(label): the seam rests in its shape")
+        }
+
+        // On every device, at 30, 60 and 120 Hz, and with Prefer Cross-Fade Transitions, which
+        // keeps the intro's motion, nothing jumps.
+        let devices: [StageMetrics] = [.iPhoneSE, .iPhone18Pro, .iPhoneProMax, .iPadPortrait, .iPadLandscape]
+        var watched = 0
+        for (i, device) in devices.enumerated() {
+            for hz in [30.0, 60, 120] {
+                let mode = hz == 60 && i % 2 == 0 ? StageMode(crossFadeOnly: true) : StageMode()
+                var watch = SmoothWatch("the intro on a \(device.width)-pt stage at \(Int(hz)) Hz", metrics: device)
+                perform(StageScript(duration: 5), seed: UInt64(20 + i), metrics: device, mode: mode, hz: hz,
+                        intro: true) { time, frame, _ in
+                    watch.see(frame, at: time)
+                }
+                watched += watch.jumpsChecked
+            }
+        }
+        check(watched > 5000, "the devices' intros were watched over \(watched) frames")
+
+        // Any cadence draws the same frames at the same times: a digest every 0.25 s.
+        let quarters = (1...24).map { Double($0) / 4 }
+        var jitter = SplitMix64(seed: 13)
+        var jittered: [Double] = []
+        var clock = 0.0, hitched = false
+        while clock < 6 {
+            var dt = jitter.uniform(in: 0.008...0.017)
+            if !hitched, clock > 1.42 {
+                dt = 0.09
+                hitched = true
+            }
+            let next = min(clock + dt, 6)
+            jittered += quarters.filter { $0 > clock && $0 < next }
+            jittered.append(next)
+            clock = next
+        }
+        var replays: [(digests: [UInt64], events: [StageEventRecord])] = []
+        for frames in [frameTimes(30, until: 6, quarters: quarters), frameTimes(60, until: 6, quarters: quarters),
+                       frameTimes(120, until: 6, quarters: quarters), jittered] {
+            var sim = introduced(seed: 9)
+            var digests: [UInt64] = [], events: [StageEventRecord] = []
+            for time in frames {
+                let frame = sim.advance(to: time, mouths: SilentMouths())
+                if quarters.contains(time) { digests.append(frame.digest()) }
+                events += sim.drainEvents()
+            }
+            replays.append((digests, events))
+        }
+        check(replays[0].digests.count == quarters.count && Set(replays[0].digests).count > 16,
+              "the intro's digests change as it plays")
+        for replay in replays.dropFirst() {
+            check(replay.digests == replays[0].digests && replay.events == replays[0].events,
+                  "the intro draws the same frames and events at any cadence")
+        }
+
+        // A conversation starting at any moment (active, or preparing too) hands over smoothly:
+        // from then on no beat runs, anyone unseen pops in at once, the shove lets go, and the
+        // intro is over once the pops are.
+        var handovers = 0
+        for (k, at) in stride(from: 0.0, through: 3.6, by: 0.05).enumerated() {
+            var script = StageScript(duration: at + 4)
+            script.at(at) {
+                $0.active = true
+                $0.preparing = k % 2 == 0
+            }
+            let label = "a conversation at \(String(format: "%.2f", at)) s"
+            let start = Double(FixedStepper.index(atOrAfter: at)) / FixedStepper.rate
+            var watch = SmoothWatch(label, metrics: m)
+            var events: [StageEventRecord] = []
+            var unseen = Set(DuoCharacter.allCases)
+            perform(script, seed: UInt64(k), intro: true) { time, frame, sim in
+                watch.see(frame, at: time)
+                // The conversation reaches the stage with the first frame at or after its time:
+                // what came before is the intro's.
+                let drained = sim.drainEvents()
+                if time < at {
+                    unseen = Set(DuoCharacter.allCases.filter { frame.picture.faces[$0].pop == .unseen })
+                    return
+                }
+                events += drained
+                check(sim.seam.shove.target == 0 && sim.intro?.shover == nil, "\(label): the shove lets go")
+                if time >= start + FacePop.duration {
+                    check(sim.intro == nil && frame.picture.faces.angel.pop == FacePop()
+                              && frame.picture.faces.devil.pop == FacePop(), "\(label): the intro is over at \(time) s")
+                }
+            }
+            for record in events where isIntroGesture(record) {
+                guard case .gesture(let c, let gesture) = record.event else { continue }
+                // An agenda glance may come once the conversation is under way.
+                if gesture == .glance { continue }
+                check(gesture == .popIn && unseen.contains(c) && abs(record.time - start) < 1e-9,
+                      "\(label): \(c)'s \(gesture) at \(record.time) s, after the hand-over")
+            }
+            for c in unseen {
+                check(events.contains(StageEventRecord(time: start, event: .gesture(c, .popIn))),
+                      "\(label): \(c), unseen, pops in at the hand-over")
+            }
+            handovers += 1
+        }
+        check(handovers == 73, "\(handovers) hand-overs")
+
+        // A whole conversation starting mid-intro, as a scripted run's tap on the microphone may:
+        // the human asks, the angel answers and the devil replies, handovers both ways.
+        for (k, at) in [0.1, 0.5, 1.2, 1.45, 1.6, 2.1, 2.7].enumerated() {
+            var c = StageConversation(duration: at + 10)
+            c.activate(at: at)
+            let final = c.ask("Should I go to the gym tonight?", at: at + 0.4, addressed: [.angel])
+            c.write(.angel, at: final + 0.3)
+            var end = c.say(.angel, ["Yes!", "You will feel wonderful."], at: final + 1.0, next: .devil)
+            end = c.say(.devil, ["Or not."], at: end + 0.3, to: [.angel])
+            c.endExchange(at: end - 0.3)
+            var watch = SmoothWatch("a conversation from \(at) s", metrics: m)
+            var impacts = 0
+            perform(c.script(seed: UInt64(k)), seed: UInt64(k), intro: true) { time, frame, sim in
+                watch.see(frame, at: time)
+                impacts += sim.drainEvents().filter { if case .impact = $0.event { true } else { false } }.count
+            }
+            check(impacts == 2,
+                  "a conversation from \(at) s hands over to the angel and the devil (\(impacts) impacts)")
+        }
+
+        // Under Reduce Motion the faces fade in where they rest: one cross-fade from the stage
+        // without them, nothing moving and no gesture.
+        let reduced = StageMode(reduceMotion: true)
+        var still = introduced(seed: 3, mode: reduced)
+        check(still.intro == nil, "Reduce Motion: no beats")
+        let faded = fadeRun(&still, script: StageScript(duration: 2), until: 2) { time, frame, sim, _ in
+            check(sim.maxSpringSpeed == 0, "Reduce Motion: every spring rests during the intro (\(time) s)")
+            for c in DuoCharacter.allCases {
+                let pose = frame.picture.faces[c], placement = sim.layout[c]
+                check(pose.pop == FacePop() && pose.anchor == placement.anchor && pose.scale == placement.scale
+                          && pose.tilt == 0, "Reduce Motion: \(c) shows where it rests at \(time) s")
+                if let fade = frame.crossFade {
+                    check(fade.from.faces[c].pop == .unseen, "Reduce Motion: \(c) fades in from nothing")
+                }
+            }
+        }
+        checkFades(faded.fades, starts: [0], "Reduce Motion's intro")
+        check(!faded.events.contains {
+            if case .gesture = $0.event { true } else if case .flipped = $0.event { true } else { false }
+        }, "Reduce Motion: no gesture or flip in the intro")
+
+        // Turned on mid-shove, Reduce Motion ends the intro at once under one cross-fade.
+        var turned = introduced(seed: 3)
+        let cut = fadeRun(&turned, script: StageScript(duration: 4), until: 4, modes: [(1.6, reduced)],
+                          fromSettled: false) { time, frame, sim, _ in
+            guard time > 1.6 else { return }
+            check(sim.intro == nil && sim.maxSpringSpeed == 0, "Reduce Motion from 1.6 s: the intro ends (\(time) s)")
+            for (i, v) in frame.picture.seam.enumerated() {
+                near(v, heldProfile(sim.layout.seam, i), 1e-12, "Reduce Motion from 1.6 s: the seam holds at \(time) s")
+            }
+            for c in DuoCharacter.allCases {
+                check(frame.picture.faces[c].pop == FacePop(), "Reduce Motion from 1.6 s: \(c) is there")
+            }
+        }
+        checkFades(cut.fades, starts: [1.6], "Reduce Motion from mid-shove")
+        check(!cut.events.contains { $0.time > 1.6 && isIntroGesture($0) }, "Reduce Motion: no beat after 1.6 s")
+
+        // Under Reduce Motion, faces held unseen for a cue fade in when a conversation starts.
+        var waiting = StageSimulation(seed: 4, metrics: m, mode: reduced)
+        waiting.update(metrics: m, bubbleHeights: [:], pillHeight: 0)
+        waiting.settleAll()
+        waiting.awaitIntro()
+        var starting = StageScript(duration: 2)
+        starting.at(0.5) { $0.active = true }
+        let shown = fadeRun(&waiting, script: starting, until: 2, fromSettled: false) { time, frame, _, _ in
+            for c in DuoCharacter.allCases where time < 0.5 {
+                check(frame.picture.faces[c].pop == .unseen, "Reduce Motion: \(c) waits unseen at \(time) s")
+            }
+        }
+        checkFades(shown.fades, starts: [0.5], "Reduce Motion: a conversation shows the waiting faces")
+        check(waiting.intro == nil && waiting.frame.picture.faces.devil.pop == FacePop(), "Reduce Motion: shown")
+
+        // Held unseen, the faces wait for the cue; the intro then plays from it.
+        var cued = StageSimulation(seed: 6, metrics: m)
+        cued.update(metrics: m, bubbleHeights: [:], pillHeight: 0)
+        cued.settleAll()
+        cued.awaitIntro()
+        var cueWatch = SmoothWatch("the intro on cue", metrics: m)
+        var cueEvents: [StageEventRecord] = []
+        for k in 1...(7 * 120) {
+            let time = Double(k) / 120
+            if k == 2 * 120 { cued.beginIntro(at: time) }
+            let frame = cued.advance(to: time, mouths: SilentMouths())
+            cueWatch.see(frame, at: time)
+            cueEvents += cued.drainEvents()
+            if time <= 2.25 {
+                check(frame.picture.faces.angel.pop == .unseen && frame.picture.faces.devil.pop == .unseen,
+                      "the faces wait unseen for the cue at \(time) s")
+            }
+        }
+        check(cueEvents.filter(isIntroGesture) == gestures(from: 2), "the intro plays from its cue")
+
+        // It plays once, and a conversation already under way gets none.
+        var twice = introduced(seed: 7)
+        for k in 1...(5 * 120) { twice.advance(to: Double(k) / 120, mouths: SilentMouths()) }
+        _ = twice.drainEvents()
+        twice.beginIntro(at: 5)
+        twice.awaitIntro()
+        var again: [StageEventRecord] = []
+        for k in 1...(4 * 120) {
+            let frame = twice.advance(to: 5 + Double(k) / 120, mouths: SilentMouths())
+            again += twice.drainEvents()
+            check(frame.picture.faces.angel.pop == FacePop() && frame.picture.faces.devil.pop == FacePop(),
+                  "a second intro shows the faces as they are")
+        }
+        check(twice.intro == nil && !again.contains(where: isIntroGesture), "the intro plays once")
+        var busy = StageSimulation(seed: 8, metrics: m)
+        busy.update(metrics: m, bubbleHeights: [:], pillHeight: 0)
+        busy.settleAll()
+        busy.receive(StageInputs(active: true), at: 0.1)
+        var busyEvents: [StageEventRecord] = []
+        for k in 1...120 {
+            let time = Double(k) / 120
+            if k == 24 { busy.beginIntro(at: time) }
+            let frame = busy.advance(to: time, mouths: SilentMouths())
+            busyEvents += busy.drainEvents()
+            check(frame.picture.faces.angel.pop == FacePop() && frame.picture.faces.devil.pop == FacePop(),
+                  "a conversation under way keeps its faces")
+        }
+        check(busy.intro == nil && !busyEvents.contains(where: isIntroGesture),
+              "a conversation under way gets no intro")
+
+        // The intro pauses with the scene and carries on where it was.
+        var paused = introduced(seed: 5)
+        var pauseWatch = SmoothWatch("the intro paused", metrics: m)
+        var time = 0.0
+        while time < 1.55 - 1e-9 {
+            time += 1.0 / 120
+            pauseWatch.see(paused.advance(to: time, mouths: SilentMouths()), at: time)
+        }
+        let frozen = paused.frame
+        _ = paused.drainEvents()
+        paused.receive(StageMode(sceneActive: false), at: time)
+        let held = paused.advance(to: time + 30, mouths: SilentMouths())
+        check(held.time == frozen.time && held.digest() == frozen.digest(), "the intro stands still while inactive")
+        paused.receive(StageMode(), at: frozen.time)
+        var resumed: [StageEventRecord] = []
+        time = frozen.time
+        while time < 5 {
+            time += 1.0 / 120
+            pauseWatch.see(paused.advance(to: time, mouths: SilentMouths()), at: time)
+            resumed += paused.drainEvents()
+        }
+        check(resumed.filter(isIntroGesture) == expected.filter { $0.time > frozen.time },
+              "after the pause the intro's beats come at their times")
     }
 }

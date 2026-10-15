@@ -96,8 +96,8 @@ struct HandoverScript: Equatable, Sendable {
 
 /// The moving seam between the two halves: base, bulge, wave, windup, pulse and relax springs,
 /// the ripple chain, the wave's phase, the idle drift, the handover choreography with its impact
-/// and draw-order flip, and the walls. Values are band fractions; it knows nothing of presets,
-/// which `StageSimulation` turns into shapes through `StageLayout`.
+/// and draw-order flip, the launch intro's shove, and the walls. Values are band fractions; it
+/// knows nothing of presets, which `StageSimulation` turns into shapes through `StageLayout`.
 struct SeamRig: Sendable {
     /// Which secondary motions run.
     struct Options: Equatable, Sendable {
@@ -205,6 +205,9 @@ struct SeamRig: Sendable {
     private(set) var drift: RigSpring
     /// How far the drift has settled into its still S-curve: 0 flowing, 1 still.
     private(set) var driftStill: RigSpring
+    /// The launch intro's shove (band; positive bows the middle down into the devil's half), on
+    /// top of the shape, so a re-solved layout never cuts it short.
+    private(set) var shove: RigSpring
     /// The drift's two waves' phases in cycles.
     private(set) var driftPhases = (0.0, 0.0)
     /// The wave's phase φ in cycles.
@@ -238,6 +241,7 @@ struct SeamRig: Sendable {
         breath = RigSpring(0, spec: .relax)
         drift = RigSpring(shape.drift, spec: .relax, range: range)
         driftStill = RigSpring(1, spec: .driftSettle)
+        shove = RigSpring(0, spec: .collapse, range: range)
         ripple = Array(repeating: 0, count: Self.rippleCount)
         rippleVelocity = Array(repeating: 0, count: Self.rippleCount)
     }
@@ -288,6 +292,22 @@ struct SeamRig: Sendable {
         retargetAll()
     }
 
+    /// One of the launch intro's shoves: the middle bows `amount` (band) toward the devil
+    /// (positive) or the angel, kicked on its way at `kick` (band/s); 0 lets go, and it springs
+    /// back.
+    mutating func beginShove(_ amount: Double, kick: Double) {
+        shove.retarget(amount)
+        shove.kick(kick)
+    }
+
+    /// Draws `c` on top: the intro's shover, as the middle crosses into the other's half. True
+    /// when the order changed.
+    mutating func putOnTop(_ c: DuoCharacter) -> Bool {
+        guard dominant != c else { return false }
+        dominant = c
+        return true
+    }
+
     /// New settled targets for the same preset (a re-solved layout). Springs a handover has
     /// not launched yet keep their targets until it does.
     mutating func retarget(_ shape: SeamShape) {
@@ -318,6 +338,7 @@ struct SeamRig: Sendable {
         windup.retarget(0)
         relax.retarget(0)
         pulse.retarget(0)
+        shove.retarget(0)
         restPhase()
         settle()
     }
@@ -331,11 +352,13 @@ struct SeamRig: Sendable {
         phaseRate = 0
     }
 
-    /// Reduce Motion's held pose: unrelaxed, without breath, the drift resting as its still
-    /// S-curve and the wave static at its resting phase. `settle()` then snaps the springs to it.
+    /// Reduce Motion's held pose: unrelaxed, unshoved, without breath, the drift resting as its
+    /// still S-curve and the wave static at its resting phase. `settle()` then snaps the springs
+    /// to it.
     mutating func holdPose() {
         relax.retarget(0)
         breath.retarget(0)
+        shove.retarget(0)
         holdStill()
         restPhase()
     }
@@ -395,7 +418,7 @@ struct SeamRig: Sendable {
             dominant = handover.speaker
         }
         base.snap(); bulge.snap(); wave.snap(); windup.snap(); pulse.snap(); relax.snap(); breath.snap(); drift.snap()
-        driftStill.snap()
+        driftStill.snap(); shove.snap()
         for i in 0..<Self.rippleCount {
             ripple[i] = 0
             rippleVelocity[i] = 0
@@ -456,7 +479,7 @@ struct SeamRig: Sendable {
             driftPhases.1 -= driftPhases.1.rounded(.down)
         }
         base.step(); bulge.step(); wave.step(); windup.step(); pulse.step(); relax.step(); breath.step(); drift.step()
-        driftStill.step()
+        driftStill.step(); shove.step()
         if abs(pulse.value) > Self.pulseLimit {
             pulse.value = RigMath.clamp(pulse.value, -Self.pulseLimit, Self.pulseLimit)
             if pulse.value * pulse.velocity > 0 { pulse.velocity = 0 }
@@ -520,7 +543,8 @@ struct SeamRig: Sendable {
         let s = effectiveShape
         let centre = s.base + windup.value
         let bulgeTerm = s.bulge * (1 + 0.06 * energyAngel)
-        var reach = abs(s.wave) + abs(s.drift) + abs(pulse.value) + abs(breath.value) * Self.breathAmplitude
+        var reach = abs(s.wave) + abs(s.drift) + abs(pulse.value) + abs(shove.value)
+            + abs(breath.value) * Self.breathAmplitude
         if options.ripple { reach += 1.25 * rippleMagnitude }
         if limits.maxLowest.isFinite, centre + max(0, bulgeTerm) + reach > limits.maxLowest {
             let lowest = extreme(lowest: true)
@@ -577,7 +601,7 @@ struct SeamRig: Sendable {
         let u = RigMath.clamp(u, 0, 1)
         let s = effectiveShape
         return s.base + windup.value
-            + s.bulge * (1 + 0.06 * energyAngel) * KeyPoses.bulge(u)
+            + (s.bulge * (1 + 0.06 * energyAngel) + shove.value) * KeyPoses.bulge(u)
             + s.wave * KeyPoses.wave(u, phase: phase)
             + s.drift * Self.driftProfile(u, phases: driftPhases, still: driftStill.value)
             + pulse.value * sigma * 4 * u * (1 - u)
@@ -594,7 +618,7 @@ struct SeamRig: Sendable {
         let bulgeRate = (bulge.velocity * (1 - 0.15 * r) - bulge.value * 0.15 * rv) * (1 + 0.06 * energyAngel)
         let waveRate = wave.velocity * (1 - 0.4 * r) - wave.value * 0.4 * rv
         let angle = 2 * Double.pi * (u / KeyPoses.waveLength - phase)
-        return baseRate + windup.velocity + bulgeRate * KeyPoses.bulge(u) + waveRate * sin(angle)
+        return baseRate + windup.velocity + (bulgeRate + shove.velocity) * KeyPoses.bulge(u) + waveRate * sin(angle)
             - wave.value * (1 - 0.4 * r) * cos(angle) * 2 * Double.pi * phaseRate
             + driftVelocity(at: u)
             + pulse.velocity * sigma * 4 * u * (1 - u)
@@ -624,7 +648,9 @@ struct SeamRig: Sendable {
     /// choreography pending (the drift may flow at its settled amplitude).
     var isMotionSettled: Bool {
         guard base.isSettled, bulge.isSettled, wave.isSettled, windup.isSettled, pulse.isSettled,
-              relax.isSettled, drift.isSettled, driftStill.isSettled, phaseRate == 0 else { return false }
+              relax.isSettled, drift.isSettled, driftStill.isSettled, shove.isSettled, phaseRate == 0 else {
+            return false
+        }
         if case .handover(let handover) = motion, !handover.launched || !handover.baseStarted { return false }
         for i in 0..<Self.rippleCount where abs(ripple[i]) > 1e-5 || abs(rippleVelocity[i]) > 1e-4 {
             return false
@@ -640,7 +666,9 @@ struct SeamRig: Sendable {
 
     /// The largest spring speed, for the Reduce Motion checks.
     var maxSpringSpeed: Double {
-        [base, bulge, wave, windup, pulse, relax, breath, drift, driftStill].reduce(0) { max($0, abs($1.velocity)) }
+        [base, bulge, wave, windup, pulse, relax, breath, drift, driftStill, shove].reduce(0) {
+            max($0, abs($1.velocity))
+        }
     }
 
     private mutating func use(base baseSpec: SpringSpec, bulge bulgeSpec: SpringSpec) {

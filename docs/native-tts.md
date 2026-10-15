@@ -132,7 +132,8 @@ Debug builds accept these launch arguments; Release builds compile none of them 
   pose on the stage with sample captions (`--no-captions` for none): `STAGE_POSE_READY`.
 - `--stage-script <name>` plays a scripted conversation on the stage with synthetic mouths
   and microphone level, without the model: `STAGE_SCRIPT_START`, `STAGE_SCRIPT` per step,
-  `STAGE_SCRIPT_DONE`.
+  `STAGE_SCRIPT_DONE`. `intro` replays the launch intro, with a `STAGE_SCRIPT` mark per beat,
+  and `intro-handover` starts a conversation during it.
 - `--expression-gallery [rNcM]` shows the faces' expression sheet, or one cell
   (`EXPRESSION_GALLERY_READY`); `--mouth-sheet` every mouth state (`MOUTH_SHEET_READY`).
 - `--rig-seed N` sets the stage's seed (1 for the gallery, poses and scripts; random

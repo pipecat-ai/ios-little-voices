@@ -123,14 +123,14 @@ struct StagePicture: Equatable, Sendable {
 }
 
 extension StagePicture {
-    /// The same seam, draw order and head placements; the features may differ (a mouth
-    /// closing as speech ends is not a change of held layout).
+    /// The same seam, draw order and head placements, and the faces as far popped in; the
+    /// features may differ (a mouth closing as speech ends is not a change of held layout).
     func sameLayout(as other: StagePicture) -> Bool {
         guard seam == other.seam, dominant == other.dominant, shadow == other.shadow else { return false }
         for c in DuoCharacter.allCases {
             let a = faces[c], b = other.faces[c]
             guard a.anchor == b.anchor, a.pivot == b.pivot, a.scale == b.scale, a.sx == b.sx, a.sy == b.sy,
-                  a.tilt == b.tilt, a.pin == b.pin else { return false }
+                  a.tilt == b.tilt, a.pin == b.pin, a.pop == b.pop else { return false }
         }
         return true
     }
@@ -293,6 +293,10 @@ struct StageSimulation: Sendable {
     private var drives = PerCharacter<MouthDrive?>(angel: nil, devil: nil)
     /// Each speaker's flavour for the current sentence, from its caption's cues.
     private(set) var moods = PerCharacter<TalkingMood>(angel: .none, devil: .none)
+    /// The launch intro, while it plays or the faces wait unseen for it.
+    private(set) var intro: StageIntro?
+    /// The intro has begun: it plays once.
+    private var introduced = false
     /// Fixed faces for stills (the expression gallery); nil follows the director.
     var stills = PerCharacter<FaceStill?>(angel: nil, devil: nil)
     private var events: [StageEventRecord] = []
@@ -502,6 +506,11 @@ struct StageSimulation: Sendable {
         if seamEvents.launched { launch() }
         if let c = seamEvents.flipped { record(.flipped(c), at: seam.time) }
         if let strength = seamEvents.impact { impact(strength: strength, at: seam.time) }
+        // The intro's shover comes on top as the middle crosses into the other's half.
+        if let shover = intro?.shover, shover == .angel ? seam.shove.value > 0 : seam.shove.value < 0,
+           seam.putOnTop(shover) {
+            record(.flipped(shover), at: seam.time)
+        }
 
         if stretching, !seam.isStretching {
             stretching = false
@@ -513,7 +522,7 @@ struct StageSimulation: Sendable {
             if releaseAt == nil {
                 faces[c].direct(directive(for: c))
                 faces[c].ride = speaking && !awaitingLaunch
-                    ? 0.35 * (seam.value(at: 0.5) - layout.seam.value(at: 0.5)) * metrics.bandHeight : 0
+                    ? 0.35 * (seam.value(at: 0.5) - layout.seam.value(at: 0.5)) * metrics.bandHeight : shoveRide(c)
             }
             let room = faces[c].contact == nil ? nil : liveRoom(for: c)
             let beat = faces[c].step(at: t, drive: drives[c], speaking: speaking, room: room,
@@ -597,6 +606,8 @@ struct StageSimulation: Sendable {
         if resolveLayout() { applyLayout() }
         resolveRoles(at: t)
         dispatchHeard()
+        // A conversation starting hands the intro over to it.
+        if intro != nil, new != StageInputs() { handOverIntro(at: t) }
         if let before {
             if mode.reduceMotion {
                 snapIfNeeded(from: before, rolesChanged: roles != rolesBefore)
@@ -608,7 +619,7 @@ struct StageSimulation: Sendable {
     }
 
     /// Turning Reduce Motion on snaps to the held pose (the wave at its resting phase, the seam
-    /// unrelaxed) with one cross-fade. Other mode changes leave the motion alone.
+    /// unrelaxed, the intro over) with one cross-fade. Other mode changes leave the motion alone.
     private mutating func apply(_ new: StageMode) {
         guard new != mode else { return }
         let before = new.reduceMotion && !mode.reduceMotion ? currentPicture() : nil
@@ -616,6 +627,7 @@ struct StageSimulation: Sendable {
         mode = new
         seam.setDriftFlowing(driftFlows(at: stepper.time))
         if let before {
+            finishIntro()
             settleAll()
             startFade(from: before)
         }
@@ -810,6 +822,122 @@ struct StageSimulation: Sendable {
         }
     }
 
+    // MARK: Intro
+
+    /// Holds the faces unseen until the intro begins.
+    mutating func awaitIntro() {
+        guard !introduced, intro == nil, inputs == StageInputs() else { return }
+        intro = StageIntro()
+        refreshFrame()
+    }
+
+    /// Plays the launch intro from `time`, once (`StageIntro`); a conversation already under way
+    /// gets none. Under Reduce Motion the faces fade in instead, as every change of picture does.
+    mutating func beginIntro(at time: Double) {
+        guard !introduced else { return }
+        introduced = true
+        guard inputs == StageInputs() else {
+            handOverIntro(at: stepper.time)
+            return
+        }
+        let start = max(time, stepper.time)
+        if mode.reduceMotion {
+            var before = currentPicture()
+            for c in DuoCharacter.allCases { before.faces[c].pop = .unseen }
+            intro = nil
+            crossFade = (before, start)
+            refreshFrame()
+            return
+        }
+        var intro = self.intro ?? StageIntro()
+        intro.begin(at: start)
+        self.intro = intro
+        refreshFrame()
+    }
+
+    /// Runs the intro's beats due at `t`, and lets it go once it has played.
+    private mutating func runIntro(at t: Double) {
+        guard var intro else { return }
+        while let beat = intro.beat(dueAt: t) {
+            switch beat {
+            case .pop(let c, let expression, let length):
+                intro.popIn(c, at: t)
+                directors[c].perform(.popIn, expression, at: t, for: length, atOther: false)
+                startGestures(of: c, at: t)
+                appear(c, at: t)
+            case .look(let c, let gesture, let expression, let length):
+                directors[c].perform(gesture, expression, at: t, for: length, atOther: true)
+                startGestures(of: c, at: t)
+            case .windUp(let c):
+                seam.beginShove((c == .angel ? -1 : 1) * StageIntro.windUp, kick: 0)
+                faces[c].kickSquash(-0.8)
+            case .shove(let c):
+                let sign: Double = c == .angel ? 1 : -1
+                intro.shover = c
+                seam.beginShove(sign * StageIntro.shove.amount, kick: sign * StageIntro.shove.kick)
+                faces[c].kickSquash(1.5)
+                faces[c].kickScale(0.3)
+                record(.gesture(c, .shove), at: t)
+            case .squish(let c, let length):
+                // Pressed down (the devil) or up (the angel).
+                let away: Double = c == .devil ? 1 : -1
+                directors[c].perform(.squish, .squished, at: t, for: length, atOther: true)
+                startGestures(of: c, at: t)
+                faces[c].react(c == .devil ? .oof : .eep, at: t, strength: 0.8)
+                faces[c].kickSquash(c == .devil ? -2.0 : -1.0)
+                faces[c].kickAnchor(Vec2(0, away * 120 * faces[c].scale.value))
+                seam.impulse(at: 0.5, velocity: away * 0.2)
+            case .letGo:
+                intro.shover = nil
+                seam.beginShove(0, kick: 0)
+            }
+        }
+        self.intro = intro.start == nil || intro.isRunning(at: t) ? intro : nil
+    }
+
+    /// `c` pops in at `t`: unseen until now, the face takes its look at once.
+    private mutating func appear(_ c: DuoCharacter, at t: Double) {
+        faces[c].direct(directive(for: c))
+        faces[c].settle()
+        faces[c].react(.popIn, at: t)
+    }
+
+    /// A conversation starts during the intro: no more beats, the shove lets go, and anyone not
+    /// yet there pops in (under Reduce Motion, the snap's cross-fade shows them).
+    private mutating func handOverIntro(at t: Double) {
+        guard var intro else { return }
+        introduced = true
+        guard !mode.reduceMotion else {
+            self.intro = nil
+            return
+        }
+        let unseen = DuoCharacter.allCases.filter { intro.pops[$0] == nil }
+        intro.handOver(at: t)
+        self.intro = intro
+        seam.beginShove(0, kick: 0)
+        for c in unseen {
+            appear(c, at: t)
+            record(.gesture(c, .popIn), at: t)
+        }
+    }
+
+    /// Ends the intro at once, every face there: as Reduce Motion turns on, and for stills.
+    private mutating func finishIntro() {
+        guard intro != nil else { return }
+        introduced = true
+        intro = nil
+        seam.beginShove(0, kick: 0)
+    }
+
+    /// How far `c` rides with the intro's shove (pt, + down): pushed away from it, or leaning in
+    /// behind it.
+    private func shoveRide(_ c: DuoCharacter) -> Double {
+        let push = seam.shove.value * metrics.bandHeight
+        guard push != 0, faces[c].contact == nil else { return 0 }
+        let pushed = c == .devil ? push > 0 : push < 0
+        return push * (pushed ? StageIntro.ride.pushed : StageIntro.ride.leaning)
+    }
+
     // MARK: Waiting
 
     /// The speaker's o < 0.2 for 0.6 s while holding the floor is a pause; speech resumes it.
@@ -911,6 +1039,7 @@ struct StageSimulation: Sendable {
         } else {
             nextPeek = nil
         }
+        runIntro(at: t)
         // Directives follow role and agenda changes at once, so a sleeping stage wakes for them.
         // A skip leaves them for the next frame, as it does every other change of face, and the
         // afterglow's faces follow the release rather than starting in its hold.
@@ -1153,12 +1282,14 @@ struct StageSimulation: Sendable {
 
     // MARK: Settling
 
-    /// Everything at rest: seam and faces settled, no gesture, fade, speech or pending timer
-    /// that needs frames.
+    /// Everything at rest: seam and faces settled, no gesture, fade, speech, intro or pending
+    /// timer that needs frames.
     private var isQuiet: Bool {
         let t = stepper.time
-        guard crossFade == nil, inputs.talking.isEmpty, !awaitingLaunch, stageFloor == nil || paused,
-              seam.isSettled, faces.angel.isSettled, faces.devil.isSettled else { return false }
+        guard crossFade == nil, intro?.isRunning(at: t) != true, inputs.talking.isEmpty, !awaitingLaunch,
+              stageFloor == nil || paused, seam.isSettled, faces.angel.isSettled, faces.devil.isSettled else {
+            return false
+        }
         return !directors.angel.isGesturing(at: t) && !directors.devil.isGesturing(at: t)
     }
 
@@ -1194,8 +1325,10 @@ struct StageSimulation: Sendable {
         refreshFrame()
     }
 
-    /// A settled still: choreography complete, the idle drift resting and every bubble shown.
+    /// A settled still: choreography and intro complete, the idle drift resting and every bubble
+    /// shown.
     mutating func settleForStill() {
+        finishIntro()
         seam.holdStill()
         settleAll()
         pendingSlots = []
@@ -1236,10 +1369,12 @@ struct StageSimulation: Sendable {
             shadow: RigMath.clamp(abs(centre - SeamShape.neutral.value(at: 0.5)) / 0.12, 0, 1),
             faces: PerCharacter(angel: faces.angel.pose(blink: directors.angel.blink(at: t),
                                                         reopen: directors.angel.reopen(at: t),
-                                                        peek: directors.angel.peek(at: t)),
+                                                        peek: directors.angel.peek(at: t),
+                                                        pop: intro?.pop(.angel, at: t) ?? FacePop()),
                                 devil: faces.devil.pose(blink: directors.devil.blink(at: t),
                                                         reopen: directors.devil.reopen(at: t),
-                                                        peek: directors.devil.peek(at: t))))
+                                                        peek: directors.devil.peek(at: t),
+                                                        pop: intro?.pop(.devil, at: t) ?? FacePop())))
     }
 
     /// Rebuilds `frame`, filling the spare sample array in place: no per-frame allocation once
@@ -1280,6 +1415,7 @@ struct StageSimulation: Sendable {
             return directors.angel.role == .dozing && directors.devil.role == .dozing ? .dozing : .asleep
         }
         if !mode.reduceMotion {
+            if intro?.isRunning(at: t) == true { return .transition }
             let moving = motionStart.map { t - $0 <= 1.6 } ?? false
             if (moving && !seam.isMotionSettled) || impactAt.map({ t - $0 < 0.8 }) == true
                 || abs(seam.centreVelocity) > 0.05 {
@@ -1295,7 +1431,8 @@ struct StageSimulation: Sendable {
     }
 
     /// The earliest sim time something is scheduled: agenda items, role changes, the floor
-    /// debounce, the release hold, a pending slot, a pending pause and the end of ambient breath.
+    /// debounce, the release hold, a pending slot, a pending pause, the intro's next beat and the
+    /// end of ambient breath.
     var nextWake: Double? { wake(after: stepper.time - 1e-9, agenda: true) }
 
     /// The earliest scheduled time after `after`; agenda items (blinks, doze peeks) only when
@@ -1319,6 +1456,7 @@ struct StageSimulation: Sendable {
             consider(hold.since + 1.0)
         }
         consider(releaseAt)
+        consider(intro?.nextBeat)
         if stageFloor != nil, !paused, let since = quietSince { consider(since + Self.pauseAfter) }
         consider(crossFade.map { $0.start + Self.crossFadeDuration })
         if inputs.active { consider(lastInputChange + Self.ambientTimeout) }

@@ -286,17 +286,30 @@ the angel and peach for the devil, with one soft point toward its speaker.
   exchange ends with a verdict (happy, content, sometimes a wink); an interruption
   (`ConversationModel.interruptions`, counted when playback stops early while someone
   holds the floor) startles both instead.
+- **The intro:** a launch's first stage frame introduces the characters (`StageIntro`) while
+  Python and the models load. The faces start unseen, then the angel and the devil pop in
+  beaming, springing past full size as each stretches tall and squashes wide; the pop is drawn
+  on top of the rig, so a re-measured screen never cuts it short. They notice each other, the
+  devil cackles and shoves the seam's middle up into the angel's half (she eeps), and she huffs
+  and shoves it back down (he oofs): each shover comes on top as the seam crosses into the
+  other's half, and the other is squashed and pushed away. A cheeky wink and a giggle later
+  they settle, the angel on top as at launch, about 3.3 s in. A conversation starting meanwhile
+  (`active` or `preparing`, as from a Shortcut) hands over at once: no more beats, anyone
+  unseen pops in, and the shove lets go on its spring. It plays once per launch, not on
+  returning from the background, and pauses with the scene.
 - **The speaker's mouth:** the talking face's own mouth is lip sync's rest, a closed smile.
   Taking the floor, the speaker's mouth closes from the listener's on its springs, and lip
   sync takes over as the voice starts; a speaker keeping the floor in silence keeps it shut.
   A laughing line opens to its wide floor over a few frames, and a voice that stops at once
   hands the mouth back to the face from where it was.
-- **Pacing:** the stage runs at the display's rate during handovers, 60 Hz while a mouth
-  or gesture moves, 30 Hz while only the breath and the idle drift move (the breath stops a
-  minute after the conversation's last change, the drift three), and sleeps until its next
-  scheduled gesture once everything settles. It freezes while the scene is inactive.
+- **Pacing:** the stage runs at the display's rate during handovers and the intro, 60 Hz
+  while a mouth or gesture moves, 30 Hz while only the breath and the idle drift move (the
+  breath stops a minute after the conversation's last change, the drift three), and sleeps
+  until its next scheduled gesture once everything settles. It freezes while the scene is
+  inactive.
 - **Reduce Motion:** every pose is held, changes cross-fade over 0.25 s, and no blink,
-  glance or reaction plays; the mouth still follows speech.
+  glance or reaction plays; the mouth still follows speech, and the intro's faces fade in
+  where they rest.
 - **Accessibility:** the canvas is hidden. Each half is one element at its settled region,
   read as the character's name and the sentence they are saying, or "Thinking", with the
   held expression under More Content. VoiceOver reads the header, then the stage (the angel,
@@ -307,12 +320,14 @@ the angel and peach for the devil, with one soft point toward its speaker.
 - **Appearance:** the app is light unless Settings → Appearance → Dark mode is on, which uses
   a dusk palette for the stage and its chrome.
 - **Scripted runs:** Debug builds play scripted conversations on the real stage, with
-  synthetic mouths and microphone level and no model (`--stage-script <name>`): idle,
-  handovers, rapid exchanges, long lines, a speaker waiting, the human speaking, thinking,
-  interruptions, cues, the characters addressing each other, captions, New conversation and
-  the preview's exchange. `StageConversation` (`StageScripts.swift`) turns a conversation
-  into inputs by `ConversationModel`'s rules, and the rig checks play seeded random ones
-  through `StageSimulation`, checking every frame.
+  synthetic mouths and microphone level and no model (`--stage-script <name>`): the intro
+  (`intro`, its faces unseen until the script starts) and a conversation starting during it
+  (`intro-handover`), idle, handovers, rapid exchanges, long lines, a speaker waiting, the
+  human speaking, thinking, interruptions, cues, the characters addressing each other,
+  captions, New conversation and the preview's exchange; the other scripts show no intro.
+  `StageConversation` (`StageScripts.swift`) turns a conversation into inputs by
+  `ConversationModel`'s rules, and the rig checks play seeded random ones through
+  `StageSimulation`, checking every frame.
 
 ## Lip sync
 

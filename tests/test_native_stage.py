@@ -1,5 +1,5 @@
 """Check the stage rig: springs, geometry, choreography, layout, pacing, cues, palette,
-seeded random conversations and smoothness."""
+seeded random conversations, smoothness and the launch intro."""
 
 import re
 import subprocess
@@ -20,6 +20,7 @@ RIG = [
     "FaceRig.swift",
     "SeamRig.swift",
     "StageLayout.swift",
+    "StageIntro.swift",
     "StageSimulation.swift",
     "StageColors.swift",
     "StageScripts.swift",
@@ -60,5 +61,6 @@ def test_stage_rig(tmp_path):
         "behaviour",
         "seeded stress",
         "smoothness",
+        "intro",
     ]:
         assert section in sections

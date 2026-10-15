@@ -81,9 +81,37 @@ struct StageScript: MouthSource, Sendable {
     var duration: Double
     /// Moments to look at when reviewing a recording, by sim time.
     var marks: [(time: Double, label: String)] = []
+    /// When the launch intro plays, for the scenarios that replay it; the faces wait unseen until
+    /// then.
+    private(set) var intro: Double?
 
     init(duration: Double) {
         self.duration = duration
+    }
+
+    /// Plays the launch intro at `time`, marking its beats up to the conversation it hands over
+    /// to.
+    mutating func introduce(at time: Double) {
+        intro = time
+        let handOver = steps.first { $0.inputs != StageInputs() }?.time ?? .infinity
+        for (beatTime, beat) in StageIntro.beats where time + beatTime < handOver {
+            marks.append((time: time + beatTime, label: "intro: " + Self.label(beat)))
+        }
+        if handOver.isFinite { marks.append((time: handOver, label: "intro: hands over to the conversation")) }
+        marks.sort { $0.time < $1.time }
+    }
+
+    /// An intro beat as a mark.
+    private static func label(_ beat: StageIntro.Beat) -> String {
+        switch beat {
+        case .pop(let c, let expression, _): "the \(c.rawValue) pops in (\(expression.rawValue))"
+        case .look(let c, _, let expression, _):
+            "the \(c.rawValue) looks at the \(c == .angel ? "devil" : "angel") (\(expression.rawValue))"
+        case .windUp(let c): "the \(c.rawValue) winds up"
+        case .shove(let c): "the \(c.rawValue) shoves"
+        case .squish(let c, _): "the \(c.rawValue) is squished"
+        case .letGo: "the shove lets go"
+        }
     }
 
     /// Changes the inputs at `time`; times must not go backwards.
@@ -467,13 +495,31 @@ struct StageConversation {
 
 extension StageScript {
     /// The `--stage-script` scenarios: each exercises part of the stage for review.
-    static let scenarioNames = ["idle", "idle-active", "handovers", "rapid", "long-line", "waiting", "human",
-                                "thinking", "interrupt", "cues", "addressing", "captions", "reset", "preview"]
+    static let scenarioNames = ["intro", "intro-handover", "idle", "idle-active", "handovers", "rapid", "long-line",
+                                "waiting", "human", "thinking", "interrupt", "cues", "addressing", "captions", "reset",
+                                "preview"]
 
     /// The scenario called `name`, seeded.
     static func scenario(_ name: String, seed: UInt64 = 1) -> StageScript? {
         var c: StageConversation
         switch name {
+        case "intro":
+            // The launch intro, then the stage waiting for the human.
+            var script = StageConversation(duration: 9).script(seed: seed)
+            script.introduce(at: 0)
+            return script
+        case "intro-handover":
+            // A conversation starts mid-shove, as a scripted run's tap on the microphone may: the
+            // shove lets go and the conversation takes over.
+            c = StageConversation(duration: 14)
+            c.activate(at: 1.6)
+            let final = c.ask("Should I go to the gym tonight?", at: 2.4, addressed: [.angel])
+            c.write(.angel, at: final + 0.3)
+            let end = c.say(.angel, ["Yes!", "You will feel wonderful."], at: final + 1.2)
+            c.endExchange(at: end - 0.3)
+            var script = c.script(seed: seed)
+            script.introduce(at: 0)
+            return script
         case "idle":
             // Before a conversation: blinks and looks about, dozing after 30 s.
             c = StageConversation(duration: 45)

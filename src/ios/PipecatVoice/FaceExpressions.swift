@@ -43,6 +43,9 @@ enum FaceReaction: String, CaseIterable, Sendable {
     case eep
     case startle
     case popUp
+    /// Popping in at the launch intro: the halo bobs up and the wings flutter, or the horns
+    /// stretch and splay; the marks pulse.
+    case popIn
     case nod
     case shocked
     case huff

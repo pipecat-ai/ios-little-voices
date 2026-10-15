@@ -67,6 +67,8 @@ struct FacePose: Equatable, Sendable {
     /// The face's own clock: the seconds it has moved, for the starry eyes' turn and twinkle. It
     /// stands still while the stage sleeps, so nothing jumps when it wakes.
     var clock = 0.0
+    /// The launch intro's pop, drawn on top of the rig about the pivot.
+    var pop = FacePop()
 
     /// A face-unit point in stage points.
     func point(_ p: Vec2) -> Vec2 {
@@ -76,14 +78,16 @@ struct FacePose: Equatable, Sendable {
     /// The eye midpoint's y.
     var eyeLine: Double { point(.zero).y }
 
-    /// The pose as drawn: breath, bob and shake folded into the head transform, the squash kept
-    /// within its limits.
+    /// The pose as drawn: breath, bob, shake and the pop folded into the head transform, the
+    /// squash kept within its limits, and the halo popped with the head.
     var drawn: FacePose {
         var p = self
-        p.sy = FaceRig.limitSquash(sy * (1 + breath), character)
+        p.sy = FaceRig.limitSquash(sy * (1 + breath) * pop.squash, character)
         p.sx = pow(p.sy, FaceRig.volumeExponent)
-        p.anchor = anchor + Vec2(0, bob * scale).rotated(by: tilt)
+        p.scale = scale * pop.size
+        p.anchor = anchor + Vec2(0, bob * p.scale).rotated(by: tilt)
         p.tilt = tilt + shake
+        if pop != FacePop() { p.halo.center = pop.place(halo.center, about: anchor, tilt: tilt) }
         return p
     }
 
@@ -95,7 +99,7 @@ struct FacePose: Equatable, Sendable {
         for v in [anchor.x, anchor.y, pivot.x, pivot.y, scale, sx, sy, tilt, blink, reopen, peek, talkOpen, turn.x,
                   turn.y, halo.center.x, halo.center.y, halo.rotation, halo.squash, halo.glow, wings.left, wings.right,
                   horns.left, horns.right, hornStretch, markPulse, veinThrob, puff, squeeze, press, breath, bob, shake,
-                  clock] {
+                  clock, pop.size, pop.squash] {
             body(v)
         }
         for i in FaceTargets.channels.indices { body(features.value(i)) }
@@ -384,6 +388,17 @@ struct FaceRig: Sendable {
         case .popUp:
             puff.kick(-1.5)
             markPulse.kick(2)
+        case .popIn:
+            if character == .angel {
+                haloCenter.kick(Vec2(0, -150 * s))
+                wings.left.kick(20 * Self.degrees * 10)
+                wings.right.kick(20 * Self.degrees * 10)
+            } else {
+                hornStretch.kick(4)
+                horns.left.kick(5)
+                horns.right.kick(5)
+            }
+            markPulse.kick(2.5)
         case .nod:
             anchor.kick(Vec2(0, 60 * s))
         case .shocked:
@@ -812,11 +827,12 @@ struct FaceRig: Sendable {
         return pose
     }
 
-    func pose(blink: Double = 0, reopen: Double = 1, peek: Double = 0) -> FacePose {
+    func pose(blink: Double = 0, reopen: Double = 1, peek: Double = 0, pop: FacePop = FacePop()) -> FacePose {
         var pose = headPose()
         pose.blink = blink
         pose.reopen = reopen
         pose.peek = peek
+        pose.pop = pop
         var features = current
         features.mouth = mouth
         features.brows.left.dy += browKick.value

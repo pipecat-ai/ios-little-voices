@@ -11,7 +11,8 @@ import SwiftUI
 /// - `--stage-script <name>`: a scripted conversation (`StageScript.scenario`) played on the real
 ///   stage with synthetic mouths and microphone level, the model not started, 1.5 s after
 ///   launch; it logs `STAGE_SCRIPT_START`, each step and mark (`STAGE_SCRIPT`) and
-///   `STAGE_SCRIPT_DONE`;
+///   `STAGE_SCRIPT_DONE`. `intro` replays the launch intro, its faces unseen until then, and
+///   `intro-handover` starts a conversation in the middle of it; the others show no intro;
 /// - `--rig-seed N`: the rig's seed (1 for the gallery, poses and scripts, otherwise random per
 ///   launch);
 /// - `--rig-trace`: the stage's events (`STAGE_EVENT`) and frame counts (`STAGE_LINK`,

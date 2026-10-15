@@ -145,6 +145,8 @@ enum StageRenderer {
     static func drawFace(_ rig: FacePose, palette: StagePalette, glow: StageGlow?, in context: inout GraphicsContext,
                          size: CGSize) {
         let pose = rig.drawn
+        // Not yet popped in at the launch intro.
+        guard pose.scale > 0 else { return }
         var layer = context
         if case .floor(let y) = pose.pin {
             layer.clip(to: Path(CGRect(x: -100, y: -1000, width: size.width + 200, height: y + 1000)))

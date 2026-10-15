@@ -31,6 +31,7 @@ RIG = [
     "FaceRig.swift",
     "SeamRig.swift",
     "StageLayout.swift",
+    "StageIntro.swift",
     "StageSimulation.swift",
     "StageColors.swift",
 ]
