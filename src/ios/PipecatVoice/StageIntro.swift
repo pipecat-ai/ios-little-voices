@@ -44,24 +44,25 @@ struct FacePop: Equatable, Sendable {
     }
 }
 
-/// The launch intro: the characters pop in, shove each other back and forth along the seam, make
-/// up, and settle to wait for the human. Its beats run at fixed times from its start. A
-/// conversation starting hands over at once: the beats stop, anyone not yet there pops in, and
-/// the shove lets go. Under Reduce Motion the faces fade in instead (`StageSimulation`).
+/// The launch intro: the characters pop in, shove each other in turn, each taking the floor as a
+/// speaker does and squishing the other, make up, and settle to wait for the human. Its beats run
+/// at fixed times from its start. A conversation starting hands over at once: the beats stop,
+/// anyone not yet there pops in, and a shover's floor is let go. Under Reduce Motion the faces
+/// fade in instead (`StageSimulation`).
 struct StageIntro: Sendable {
     enum Beat: Equatable, Sendable {
         /// The face pops in, holding `expression` at the human for `length` s.
         case pop(DuoCharacter, FaceExpression, length: Double)
         /// The face holds `expression` at the other character for `length` s, as `gesture`.
         case look(DuoCharacter, StageGesture, FaceExpression, length: Double)
-        /// The shover crouches, the seam pulling back toward them.
+        /// The shover crouches, gathering.
         case windUp(DuoCharacter)
-        /// The shover pushes the seam's middle into the other's half and stretches into it.
+        /// The shover takes the floor as a speaker does, though nobody speaks: the seam hands
+        /// over to them, and the other is squished against it.
         case shove(DuoCharacter)
-        /// The shoved face takes it: squished for `length` s, its impact reaction, a jolt away
-        /// from the seam and a ripple along it.
+        /// The shoved face looks squished for `length` s.
         case squish(DuoCharacter, length: Double)
-        /// The shover lets go, and the seam springs back.
+        /// The shover lets the floor go, and the seam is released back to nobody's.
         case letGo
     }
 
@@ -74,30 +75,31 @@ struct StageIntro: Sendable {
         // They notice each other: he smirks, she smiles back.
         (0.95, .look(.devil, .glance, .thinking, length: 0.45)),
         (1.05, .look(.angel, .glance, .listening, length: 0.5)),
-        // He cackles and shoves her up...
-        (1.3, .look(.devil, .laughAlong, .laughing, length: 0.55)),
+        // He sets his jaw and shoves her up, and cackles as she is squashed...
+        (1.3, .look(.devil, .shove, .determined, length: 0.55)),
         (1.3, .windUp(.devil)),
-        (1.4, .shove(.devil)),
-        (1.48, .squish(.angel, length: 0.45)),
-        (1.78, .letGo),
-        // ...she huffs and shoves him back down...
-        (1.85, .look(.angel, .huff, .grumpy, length: 0.5)),
-        (1.85, .windUp(.angel)),
-        (1.95, .shove(.angel)),
-        (2.03, .squish(.devil, length: 0.45)),
-        (2.33, .letGo),
+        (1.45, .shove(.devil)),
+        (1.75, .squish(.angel, length: 0.65)),
+        (1.95, .look(.devil, .laughAlong, .laughing, length: 0.45)),
+        (2.4, .letGo),
+        // ...she glares down at him and shoves him back...
+        (2.65, .look(.angel, .shove, .determined, length: 0.55)),
+        (2.65, .windUp(.angel)),
+        (2.8, .shove(.angel)),
+        (3.1, .squish(.devil, length: 0.65)),
+        (3.75, .letGo),
         // ...and they make up: a cheeky wink, a giggle.
-        (2.5, .look(.devil, .cheekyWink, .wink, length: 0.75)),
-        (2.6, .look(.angel, .laughAlong, .laughing, length: 0.7)),
+        (4.0, .look(.devil, .cheekyWink, .wink, length: 0.75)),
+        (4.1, .look(.angel, .laughAlong, .laughing, length: 0.7)),
     ]
 
-    /// How far a shove bows the seam's middle into the other's half (band), and the kick it
-    /// starts with (band/s).
-    static let shove = (amount: 0.07, kick: 0.45)
-    /// How far the wind-up pulls the seam back toward the shover (band).
-    static let windUp = 0.012
-    /// How far each face rides with the shove (of the seam's travel): pushed, or leaning in.
-    static let ride = (pushed: 0.5, leaning: 0.25)
+    /// The intro's length: until its last look ends.
+    static let length = beats.map { time, beat in
+        switch beat {
+        case .pop(_, _, let length), .look(_, _, _, let length), .squish(_, let length): time + length
+        case .windUp, .shove, .letGo: time
+        }
+    }.max() ?? 0
 
     /// When the intro started; nil while the faces wait unseen for it.
     private(set) var start: Double?
@@ -105,8 +107,8 @@ struct StageIntro: Sendable {
     private(set) var pops = PerCharacter<Double?>(angel: nil, devil: nil)
     /// The next beat to run.
     private(set) var next = 0
-    /// Who shoves the seam: they come on top as its middle crosses into the other's half.
-    var shover: DuoCharacter?
+    /// A conversation has taken over: the intro ends once every face has popped in.
+    private(set) var handedOver = false
 
     /// Starts the beats at `time`.
     mutating func begin(at time: Double) {
@@ -126,12 +128,12 @@ struct StageIntro: Sendable {
         if pops[c] == nil { pops[c] = t }
     }
 
-    /// A conversation starts at `t`: no more beats, anyone unseen pops in, and the shove lets go.
+    /// A conversation starts at `t`: no more beats, and anyone unseen pops in.
     mutating func handOver(at t: Double) {
         start = start ?? t
         next = Self.beats.count
+        handedOver = true
         for c in DuoCharacter.allCases { popIn(c, at: t) }
-        shover = nil
     }
 
     /// `c`'s pop at `t`.
@@ -145,10 +147,11 @@ struct StageIntro: Sendable {
         return start + Self.beats[next].time
     }
 
-    /// Beats are still to come or a face is still popping in; false while it waits to start.
+    /// Its last look has not ended, unless a conversation took over, or a face is still popping
+    /// in; false while it waits to start.
     func isRunning(at t: Double) -> Bool {
-        guard start != nil else { return false }
-        return next < Self.beats.count
+        guard let start else { return false }
+        return !handedOver && t - start < Self.length
             || DuoCharacter.allCases.contains { pops[$0].map { t - $0 < FacePop.duration } ?? false }
     }
 }

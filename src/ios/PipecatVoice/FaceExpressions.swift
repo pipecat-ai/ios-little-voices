@@ -17,6 +17,7 @@ enum FaceExpression: String, CaseIterable, Sendable {
     case starry
     case sideEye
     case grumpy
+    case determined
     case surprised
     case sleepy
 }
@@ -91,6 +92,9 @@ enum ExpressionLibrary {
         case (.devil, .sideEye): Vec2(0.85, 0.15)
         case (.devil, .content): Vec2(0.6, 0.1)
         case (.devil, .sleepy): Vec2(0.5, 0.5)
+        // Fixed on the other, across the seam: the angel down, the devil up.
+        case (.angel, .determined): Vec2(0.05, 0.9)
+        case (.devil, .determined): Vec2(0.1, -0.9)
         default: nil
         }
     }
@@ -187,6 +191,19 @@ enum ExpressionLibrary {
             f.mouth = MouthParams(width: 38, open: 0, corner: -8, line: AngelGeometry.mouthLine)
             f.accessories.blush = 1
             f.accessories.blushSize = 1.15
+        case .determined:
+            // Pushing: white eyes narrowed under brows hard down to the nose, a firm, effortful
+            // mouth, flushed cheeks and the head leaning into it. Her eyes have no lids, so they
+            // narrow by their height.
+            eyes(&f) { $0.sclera = 1; $0.iris = 0.6; $0.open = 0.82; $0.sparkle = 0 }
+            // Her resting brows rise toward the middle, so it takes a steep turn to bring their
+            // inner ends down.
+            brows(&f) { $0.angle = 38; $0.dy = 5; $0.arch = 0.3 }
+            f.mouth = MouthParams(width: 34, open: 8, corner: -4, line: AngelGeometry.mouthLine)
+            f.accessories.blush = 1
+            f.accessories.blushSize = 1.2
+            f.accessories.dashes = 0
+            f.accessories.headDy = 6
         case .surprised:
             eyes(&f) { $0.sclera = 1; $0.iris = 0.5; $0.open = 1.2; $0.size = 1.08 }
             brows(&f) { $0.dy = -8 }
@@ -298,6 +315,14 @@ enum ExpressionLibrary {
             brows(&f) { $0.dy = 3; $0.angle = -6 }
             f.mouth = DevilMouths.smirkLeft
             f.accessories.motion = 0
+        case .determined:
+            // Pushing: narrowed eyes under brows hard down to the nose, a gritted line with the
+            // fang, the motion dashes flaring and the head leaning into it.
+            eyes(&f) { $0.iris = 0.55; $0.inward = 0.2; $0.lidTop = 0.3; $0.lidAngle = 24; $0.lowerLid = 0.08 }
+            brows(&f) { $0.angle = 15; $0.dy = 4 }
+            f.mouth = DevilMouths.grimace
+            f.accessories.motion = 1.3
+            f.accessories.headDy = -6
         case .grumpy:
             // Angry, with the anger vein: brows hard down to the nose, narrowed eyes, a frown.
             eyes(&f) { $0.iris = 0.55; $0.inward = 0.5; $0.lidTop = 0.32; $0.lidAngle = 28; $0.lowerLid = 0.12 }

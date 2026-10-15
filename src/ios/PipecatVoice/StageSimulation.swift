@@ -506,11 +506,6 @@ struct StageSimulation: Sendable {
         if seamEvents.launched { launch() }
         if let c = seamEvents.flipped { record(.flipped(c), at: seam.time) }
         if let strength = seamEvents.impact { impact(strength: strength, at: seam.time) }
-        // The intro's shover comes on top as the middle crosses into the other's half.
-        if let shover = intro?.shover, shover == .angel ? seam.shove.value > 0 : seam.shove.value < 0,
-           seam.putOnTop(shover) {
-            record(.flipped(shover), at: seam.time)
-        }
 
         if stretching, !seam.isStretching {
             stretching = false
@@ -522,7 +517,7 @@ struct StageSimulation: Sendable {
             if releaseAt == nil {
                 faces[c].direct(directive(for: c))
                 faces[c].ride = speaking && !awaitingLaunch
-                    ? 0.35 * (seam.value(at: 0.5) - layout.seam.value(at: 0.5)) * metrics.bandHeight : shoveRide(c)
+                    ? 0.35 * (seam.value(at: 0.5) - layout.seam.value(at: 0.5)) * metrics.bandHeight : 0
             }
             let room = faces[c].contact == nil ? nil : liveRoom(for: c)
             let beat = faces[c].step(at: t, drive: drives[c], speaking: speaking, room: room,
@@ -551,6 +546,9 @@ struct StageSimulation: Sendable {
         inputs = new
         lastInputChange = t
         seam.setDriftFlowing(driftFlows(at: t))
+        // A conversation starting hands the intro over to it, letting a shover's floor go before
+        // the conversation's own floor and leans apply.
+        if intro != nil, new != StageInputs() { handOverIntro(at: t) }
         if new.floor != nil { lineAddressed = new.addressed }
         if new.userText != nil, old.userText == nil, !mode.reduceMotion {
             // The human starts speaking: a dozing face wakes with a start.
@@ -606,8 +604,6 @@ struct StageSimulation: Sendable {
         if resolveLayout() { applyLayout() }
         resolveRoles(at: t)
         dispatchHeard()
-        // A conversation starting hands the intro over to it.
-        if intro != nil, new != StageInputs() { handOverIntro(at: t) }
         if let before {
             if mode.reduceMotion {
                 snapIfNeeded(from: before, rolesChanged: roles != rolesBefore)
@@ -671,7 +667,9 @@ struct StageSimulation: Sendable {
 
     // MARK: Choreography
 
-    private mutating func handover(to speaker: DuoCharacter, from previous: DuoCharacter?, at t: Double) {
+    /// The floor goes to `speaker`; the idle drift gives way on `driftSpec`.
+    private mutating func handover(to speaker: DuoCharacter, from previous: DuoCharacter?, at t: Double,
+                                   driftSpec: SpringSpec = .collapse) {
         moods = PerCharacter(angel: .none, devil: .none)
         motionStart = t
         impactAt = nil
@@ -698,7 +696,7 @@ struct StageSimulation: Sendable {
             settleAll()
             return
         }
-        seam.beginHandover(to: speaker, from: previous, shape: layout.seam, at: t)
+        seam.beginHandover(to: speaker, from: previous, shape: layout.seam, at: t, driftSpec: driftSpec)
         awaitingLaunch = true
         endStretch()
         if faces[speaker].contact != nil { faces[speaker].endContact(kick: 0) }
@@ -869,27 +867,23 @@ struct StageSimulation: Sendable {
                 directors[c].perform(gesture, expression, at: t, for: length, atOther: true)
                 startGestures(of: c, at: t)
             case .windUp(let c):
-                seam.beginShove((c == .angel ? -1 : 1) * StageIntro.windUp, kick: 0)
-                faces[c].kickSquash(-0.8)
+                faces[c].kickSquash(-1.2)
             case .shove(let c):
-                let sign: Double = c == .angel ? 1 : -1
-                intro.shover = c
-                seam.beginShove(sign * StageIntro.shove.amount, kick: sign * StageIntro.shove.kick)
-                faces[c].kickSquash(1.5)
-                faces[c].kickScale(0.3)
+                // The shover takes the floor as a speaker does: the handover's windup, launch
+                // and impact, the other squished against the seam, though nobody speaks. The
+                // idle drift eases out rather than collapsing with the windup.
+                let before = crossFades ? currentPicture() : nil
+                handover(to: c, from: preset.speaker, at: t, driftSpec: .relax)
+                if let before { startFade(from: before) }
                 record(.gesture(c, .shove), at: t)
             case .squish(let c, let length):
-                // Pressed down (the devil) or up (the angel).
-                let away: Double = c == .devil ? 1 : -1
                 directors[c].perform(.squish, .squished, at: t, for: length, atOther: true)
                 startGestures(of: c, at: t)
-                faces[c].react(c == .devil ? .oof : .eep, at: t, strength: 0.8)
-                faces[c].kickSquash(c == .devil ? -2.0 : -1.0)
-                faces[c].kickAnchor(Vec2(0, away * 120 * faces[c].scale.value))
-                seam.impulse(at: 0.5, velocity: away * 0.2)
             case .letGo:
-                intro.shover = nil
-                seam.beginShove(0, kick: 0)
+                let before = crossFades ? currentPicture() : nil
+                releaseFrom = nil
+                release(at: t)
+                if let before { startFade(from: before) }
             }
         }
         self.intro = intro.start == nil || intro.isRunning(at: t) ? intro : nil
@@ -902,8 +896,8 @@ struct StageSimulation: Sendable {
         faces[c].react(.popIn, at: t)
     }
 
-    /// A conversation starts during the intro: no more beats, the shove lets go, and anyone not
-    /// yet there pops in (under Reduce Motion, the snap's cross-fade shows them).
+    /// A conversation starts during the intro: no more beats, a shover's floor is let go, and
+    /// anyone not yet there pops in (under Reduce Motion, the snap's cross-fade shows them).
     private mutating func handOverIntro(at t: Double) {
         guard var intro else { return }
         introduced = true
@@ -914,7 +908,7 @@ struct StageSimulation: Sendable {
         let unseen = DuoCharacter.allCases.filter { intro.pops[$0] == nil }
         intro.handOver(at: t)
         self.intro = intro
-        seam.beginShove(0, kick: 0)
+        dropIntroFloor(at: t)
         for c in unseen {
             appear(c, at: t)
             record(.gesture(c, .popIn), at: t)
@@ -926,16 +920,13 @@ struct StageSimulation: Sendable {
         guard intro != nil else { return }
         introduced = true
         intro = nil
-        seam.beginShove(0, kick: 0)
+        dropIntroFloor(at: stepper.time)
     }
 
-    /// How far `c` rides with the intro's shove (pt, + down): pushed away from it, or leaning in
-    /// behind it.
-    private func shoveRide(_ c: DuoCharacter) -> Double {
-        let push = seam.shove.value * metrics.bandHeight
-        guard push != 0, faces[c].contact == nil else { return 0 }
-        let pushed = c == .devil ? push > 0 : push < 0
-        return push * (pushed ? StageIntro.ride.pushed : StageIntro.ride.leaning)
+    /// Springs back to nobody's floor if a shove holds one and no conversation does.
+    private mutating func dropIntroFloor(at t: Double) {
+        guard stageFloor == nil, preset.speaker != nil else { return }
+        interrupt(at: t)
     }
 
     // MARK: Waiting

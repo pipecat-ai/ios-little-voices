@@ -8,9 +8,9 @@ struct SeamShape: Equatable, Sendable {
     var base: Double
     var bulge: Double
     var wave: Double
-    /// The idle drift's amplitude: with nobody on the floor the seam flows in two slow waves
-    /// across the window (`SeamRig.driftProfile`). It gives way as someone takes the floor, and
-    /// rests as a still S-curve under Reduce Motion and after a long idle.
+    /// The idle drift's amplitude: with nobody on the floor the seam is one smooth S across the
+    /// window that rolls and swells slowly (`SeamRig.driftProfile`). It gives way as someone
+    /// takes the floor, and rests as a still S under Reduce Motion and after a long idle.
     var drift: Double
 
     init(base: Double, bulge: Double, wave: Double, drift: Double = 0) {
@@ -96,7 +96,7 @@ struct HandoverScript: Equatable, Sendable {
 
 /// The moving seam between the two halves: base, bulge, wave, windup, pulse and relax springs,
 /// the ripple chain, the wave's phase, the idle drift, the handover choreography with its impact
-/// and draw-order flip, the launch intro's shove, and the walls. Values are band fractions; it
+/// and draw-order flip, and the walls. Values are band fractions; it
 /// knows nothing of presets, which `StageSimulation` turns into shapes through `StageLayout`.
 struct SeamRig: Sendable {
     /// Which secondary motions run.
@@ -180,14 +180,14 @@ struct SeamRig: Sendable {
     static let rippleLimit = 0.025
     static let breathAmplitude = 0.0026
     static let breathRate = 0.29
-    /// The idle drift's two travelling waves: one wavelength across the window heading right
-    /// every 11 s, and two heading left every 7.3 s, weighted 0.7 and 0.3 of the amplitude. Whole
-    /// wavelengths keep the seam level on average at every moment, and the periods' ratio keeps
-    /// the flow from repeating.
-    static let driftPeriods = (11.0, 7.3)
-    static let driftWeights = (0.7, 0.3)
-    /// The drift at rest: both waves still at phase 0, a soft S through the middle of the band at
-    /// this share of the amplitude, the same for both halves.
+    /// The idle drift: one wavelength across the window, a smooth S, rolling right a wavelength
+    /// every 11 s and swelling from `driftSwell` of the amplitude to all of it every 7.3 s. A
+    /// whole wavelength keeps the seam level on average at every moment, the roll keeps every
+    /// point level on average over time, and the periods' ratio keeps the motion from repeating.
+    static let driftPeriods = (roll: 11.0, swell: 7.3)
+    static let driftSwell = 0.7
+    /// The drift at rest: the S through the middle of the band at this share of the amplitude,
+    /// the same for both halves.
     static let driftStillShare = 0.6
     /// Ripple impulses are Gaussian in u with this σ.
     static let rippleSigma = 0.09
@@ -203,12 +203,9 @@ struct SeamRig: Sendable {
     /// The idle drift's amplitude (band), sprung apart from the base and bulge so it never
     /// changes the handovers' choreography.
     private(set) var drift: RigSpring
-    /// How far the drift has settled into its still S-curve: 0 flowing, 1 still.
+    /// How far the drift has settled into its still S: 0 flowing, 1 still.
     private(set) var driftStill: RigSpring
-    /// The launch intro's shove (band; positive bows the middle down into the devil's half), on
-    /// top of the shape, so a re-solved layout never cuts it short.
-    private(set) var shove: RigSpring
-    /// The drift's two waves' phases in cycles.
+    /// The drift's roll and swell phases in cycles.
     private(set) var driftPhases = (0.0, 0.0)
     /// The wave's phase φ in cycles.
     private(set) var phase = KeyPoses.restPhase
@@ -241,15 +238,16 @@ struct SeamRig: Sendable {
         breath = RigSpring(0, spec: .relax)
         drift = RigSpring(shape.drift, spec: .relax, range: range)
         driftStill = RigSpring(1, spec: .driftSettle)
-        shove = RigSpring(0, spec: .collapse, range: range)
         ripple = Array(repeating: 0, count: Self.rippleCount)
         rippleVelocity = Array(repeating: 0, count: Self.rippleCount)
     }
 
     // MARK: Commands
 
-    /// Starts a handover to `speaker` from `previous` (nil when nobody held the floor).
-    mutating func beginHandover(to speaker: DuoCharacter, from previous: DuoCharacter?, shape: SeamShape, at t: Double) {
+    /// Starts a handover to `speaker` from `previous` (nil when nobody held the floor); the idle
+    /// drift gives way on `driftSpec`.
+    mutating func beginHandover(to speaker: DuoCharacter, from previous: DuoCharacter?, shape: SeamShape, at t: Double,
+                                driftSpec: SpringSpec = .collapse) {
         let script = HandoverScript.script(from: previous, to: speaker)
         self.shape = shape
         motion = .handover(Handover(speaker: speaker, script: script, start: t, startBaseline: baseline))
@@ -257,7 +255,7 @@ struct SeamRig: Sendable {
         windup.retarget(script.windup)
         relax.retarget(0)
         // The idle drift gives way as the speaker gathers.
-        drift.use(.collapse)
+        drift.use(driftSpec)
         drift.retarget(driftTarget)
     }
 
@@ -292,22 +290,6 @@ struct SeamRig: Sendable {
         retargetAll()
     }
 
-    /// One of the launch intro's shoves: the middle bows `amount` (band) toward the devil
-    /// (positive) or the angel, kicked on its way at `kick` (band/s); 0 lets go, and it springs
-    /// back.
-    mutating func beginShove(_ amount: Double, kick: Double) {
-        shove.retarget(amount)
-        shove.kick(kick)
-    }
-
-    /// Draws `c` on top: the intro's shover, as the middle crosses into the other's half. True
-    /// when the order changed.
-    mutating func putOnTop(_ c: DuoCharacter) -> Bool {
-        guard dominant != c else { return false }
-        dominant = c
-        return true
-    }
-
     /// New settled targets for the same preset (a re-solved layout). Springs a handover has
     /// not launched yet keep their targets until it does.
     mutating func retarget(_ shape: SeamShape) {
@@ -338,7 +320,6 @@ struct SeamRig: Sendable {
         windup.retarget(0)
         relax.retarget(0)
         pulse.retarget(0)
-        shove.retarget(0)
         restPhase()
         settle()
     }
@@ -352,13 +333,12 @@ struct SeamRig: Sendable {
         phaseRate = 0
     }
 
-    /// Reduce Motion's held pose: unrelaxed, unshoved, without breath, the drift resting as its
+    /// Reduce Motion's held pose: unrelaxed, without breath, the drift resting as its
     /// still S-curve and the wave static at its resting phase. `settle()` then snaps the springs
     /// to it.
     mutating func holdPose() {
         relax.retarget(0)
         breath.retarget(0)
-        shove.retarget(0)
         holdStill()
         restPhase()
     }
@@ -418,7 +398,7 @@ struct SeamRig: Sendable {
             dominant = handover.speaker
         }
         base.snap(); bulge.snap(); wave.snap(); windup.snap(); pulse.snap(); relax.snap(); breath.snap(); drift.snap()
-        driftStill.snap(); shove.snap()
+        driftStill.snap()
         for i in 0..<Self.rippleCount {
             ripple[i] = 0
             rippleVelocity[i] = 0
@@ -469,17 +449,17 @@ struct SeamRig: Sendable {
 
         breath.retarget(drive.breathing && !drive.reduceMotion ? 1 : 0)
         // The idle drift flows while the drive lets it and settles into its still S-curve
-        // otherwise; its waves travel while any of the flow shows.
+        // otherwise; its S rolls and swells while any of the flow shows.
         driftStill.retarget(options.drift && drive.drifting && !drive.reduceMotion ? 0 : 1)
         drift.retarget(driftTarget)
         if driftTravels {
-            driftPhases.0 += SpringSpec.step / Self.driftPeriods.0
-            driftPhases.1 += SpringSpec.step / Self.driftPeriods.1
+            driftPhases.0 += SpringSpec.step / Self.driftPeriods.roll
+            driftPhases.1 += SpringSpec.step / Self.driftPeriods.swell
             driftPhases.0 -= driftPhases.0.rounded(.down)
             driftPhases.1 -= driftPhases.1.rounded(.down)
         }
         base.step(); bulge.step(); wave.step(); windup.step(); pulse.step(); relax.step(); breath.step(); drift.step()
-        driftStill.step(); shove.step()
+        driftStill.step()
         if abs(pulse.value) > Self.pulseLimit {
             pulse.value = RigMath.clamp(pulse.value, -Self.pulseLimit, Self.pulseLimit)
             if pulse.value * pulse.velocity > 0 { pulse.velocity = 0 }
@@ -543,7 +523,7 @@ struct SeamRig: Sendable {
         let s = effectiveShape
         let centre = s.base + windup.value
         let bulgeTerm = s.bulge * (1 + 0.06 * energyAngel)
-        var reach = abs(s.wave) + abs(s.drift) + abs(pulse.value) + abs(shove.value)
+        var reach = abs(s.wave) + abs(s.drift) + abs(pulse.value)
             + abs(breath.value) * Self.breathAmplitude
         if options.ripple { reach += 1.25 * rippleMagnitude }
         if limits.maxLowest.isFinite, centre + max(0, bulgeTerm) + reach > limits.maxLowest {
@@ -601,7 +581,7 @@ struct SeamRig: Sendable {
         let u = RigMath.clamp(u, 0, 1)
         let s = effectiveShape
         return s.base + windup.value
-            + (s.bulge * (1 + 0.06 * energyAngel) + shove.value) * KeyPoses.bulge(u)
+            + s.bulge * (1 + 0.06 * energyAngel) * KeyPoses.bulge(u)
             + s.wave * KeyPoses.wave(u, phase: phase)
             + s.drift * Self.driftProfile(u, phases: driftPhases, still: driftStill.value)
             + pulse.value * sigma * 4 * u * (1 - u)
@@ -618,7 +598,7 @@ struct SeamRig: Sendable {
         let bulgeRate = (bulge.velocity * (1 - 0.15 * r) - bulge.value * 0.15 * rv) * (1 + 0.06 * energyAngel)
         let waveRate = wave.velocity * (1 - 0.4 * r) - wave.value * 0.4 * rv
         let angle = 2 * Double.pi * (u / KeyPoses.waveLength - phase)
-        return baseRate + windup.velocity + (bulgeRate + shove.velocity) * KeyPoses.bulge(u) + waveRate * sin(angle)
+        return baseRate + windup.velocity + bulgeRate * KeyPoses.bulge(u) + waveRate * sin(angle)
             - wave.value * (1 - 0.4 * r) * cos(angle) * 2 * Double.pi * phaseRate
             + driftVelocity(at: u)
             + pulse.velocity * sigma * 4 * u * (1 - u)
@@ -648,7 +628,7 @@ struct SeamRig: Sendable {
     /// choreography pending (the drift may flow at its settled amplitude).
     var isMotionSettled: Bool {
         guard base.isSettled, bulge.isSettled, wave.isSettled, windup.isSettled, pulse.isSettled,
-              relax.isSettled, drift.isSettled, driftStill.isSettled, shove.isSettled, phaseRate == 0 else {
+              relax.isSettled, drift.isSettled, driftStill.isSettled, phaseRate == 0 else {
             return false
         }
         if case .handover(let handover) = motion, !handover.launched || !handover.baseStarted { return false }
@@ -666,7 +646,7 @@ struct SeamRig: Sendable {
 
     /// The largest spring speed, for the Reduce Motion checks.
     var maxSpringSpeed: Double {
-        [base, bulge, wave, windup, pulse, relax, breath, drift, driftStill, shove].reduce(0) {
+        [base, bulge, wave, windup, pulse, relax, breath, drift, driftStill].reduce(0) {
             max($0, abs($1.velocity))
         }
     }
@@ -688,18 +668,23 @@ struct SeamRig: Sendable {
     /// The drift's amplitude target: the shape's.
     private var driftTarget: Double { shape.drift }
 
-    /// The drift's waves travel while any of its flow shows.
+    /// The drift rolls and swells while any of its flow shows.
     var driftTravels: Bool {
         (abs(drift.value) > 1e-6 || abs(drift.velocity) > 1e-5) && (driftStill.value < 1 - 1e-6 || driftStill.target < 1)
     }
 
-    /// The drift's shape at `u` per unit of amplitude: the two travelling waves, mixed `still`
-    /// of the way into the still S-curve. |profile| ≤ 1, and its mean over the window is 0.
+    /// The drift's shape at `u` per unit of amplitude: the rolling, swelling S, mixed `still` of
+    /// the way into the still S. Either way, and between, it is one wavelength of a sine.
+    /// |profile| ≤ 1, and its mean over the window is 0.
     static func driftProfile(_ u: Double, phases: (Double, Double), still: Double) -> Double {
-        let (w0, w1) = driftWeights
-        let flowing = w0 * sin(2 * Double.pi * (u - phases.0)) + w1 * sin(2 * Double.pi * (2 * u + phases.1))
-        let resting = driftStillShare * (w0 * sin(2 * Double.pi * u) + w1 * sin(4 * Double.pi * u))
+        let flowing = driftSwelling(phases.1) * sin(2 * Double.pi * (u - phases.0))
+        let resting = driftStillShare * sin(2 * Double.pi * u)
         return flowing + (resting - flowing) * still
+    }
+
+    /// The S's share of the amplitude at swell phase `phase`: all of it at phase 0.
+    private static func driftSwelling(_ phase: Double) -> Double {
+        1 - (1 - driftSwell) * 0.5 * (1 - cos(2 * Double.pi * phase))
     }
 
     /// The ambient motion's part of the live seam at `u` (band): the idle drift and the breath,
@@ -709,16 +694,20 @@ struct SeamRig: Sendable {
             + breath.value * Self.breathAmplitude * sin(2 * Double.pi * Self.breathRate * time)
     }
 
-    /// The drift term's rate at `u` (band/s): the amplitude's, the settling's and the waves'.
+    /// The drift term's rate at `u` (band/s): the amplitude's, the settling's and the S's roll
+    /// and swell.
     private func driftVelocity(at u: Double) -> Double {
-        let (w0, w1) = Self.driftWeights
-        let a0 = 2 * Double.pi * (u - driftPhases.0), a1 = 2 * Double.pi * (2 * u + driftPhases.1)
-        let flowing = w0 * sin(a0) + w1 * sin(a1)
-        let resting = Self.driftStillShare * (w0 * sin(2 * Double.pi * u) + w1 * sin(4 * Double.pi * u))
+        let twoPi = 2 * Double.pi
+        let angle = twoPi * (u - driftPhases.0)
+        let swelling = Self.driftSwelling(driftPhases.1)
+        let flowing = swelling * sin(angle)
+        let resting = Self.driftStillShare * sin(twoPi * u)
         let m = driftStill.value
-        let travel = driftTravels
-            ? -w0 * cos(a0) * 2 * Double.pi / Self.driftPeriods.0 + w1 * cos(a1) * 2 * Double.pi / Self.driftPeriods.1
-            : 0
+        var travel = 0.0
+        if driftTravels {
+            let swellRate = -(1 - Self.driftSwell) * 0.5 * sin(twoPi * driftPhases.1) * twoPi / Self.driftPeriods.swell
+            travel = swellRate * sin(angle) - swelling * cos(angle) * twoPi / Self.driftPeriods.roll
+        }
         let profile = flowing + (resting - flowing) * m
         return drift.velocity * profile + drift.value * ((resting - flowing) * driftStill.velocity + (1 - m) * travel)
     }

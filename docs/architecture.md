@@ -238,15 +238,15 @@ handover; nobody is dimmed. Text stays SwiftUI at settled slots and never wobble
 (`StageCaptions`): each character's bubble is a soft glass capsule tinted for them, cream for
 the angel and peach for the devil, with one soft point toward its speaker.
 - **The seam at rest:** with nobody on the floor, on the start screen as in a conversation,
-  the seam flows across the middle of the band in two slow waves (`SeamShape.drift`, about
-  15 pt high on an iPhone and 24 pt on an iPad: one wavelength heading right every 11 s and
-  two heading left every 7.3 s), level on average at every moment so neither half leans into
-  the other. It gives way as someone takes the floor and returns as the stage relaxes. Three
-  minutes after the last input it settles into a still S-curve and the stage sleeps; any
-  input or the app's return sets it flowing again. Under Reduce Motion it is that still
-  curve. A soft edge feathers a warm glow into the angel's side and a faint shade into the
-  devil's, handing over to the dominant rim and the contact shadow as someone takes the
-  floor. On an iPad the seam's 720-pt window eases into level runs to the screen's edges.
+  the seam is one smooth S across the middle of the band (`SeamShape.drift`, about 15 pt high
+  on an iPhone and 24 pt on an iPad) that rolls right a wavelength every 11 s and swells every
+  7.3 s, level on average at every moment so neither half leans into the other. It gives way
+  as someone takes the floor and returns as the stage relaxes. Three minutes after the last
+  input it settles into a still S and the stage sleeps; any input or the app's return sets it
+  moving again. Under Reduce Motion it is that still S. A soft edge feathers a warm glow into
+  the angel's side and a faint shade into the devil's, handing over to the dominant rim and
+  the contact shadow as someone takes the floor. On an iPad the seam's 720-pt window eases
+  into level runs to the screen's edges.
 - **Who is addressed:** `DuoLLMService` emits an `addressed` event with Audience's
   reading of each line: the human's (`line` null) as soon as it is read, and each
   character's when it is written, with its `line` number. `to` holds character ids, or
@@ -266,13 +266,13 @@ the angel and peach for the devil, with one soft point toward its speaker.
 - **The human:** their words, live or final, float in a pill over the seam until a
   character's first line plays.
 - **Chrome:** Settings and New conversation sit in the top corners. Before a conversation
-  the microphone stands alone above the home indicator, gray with a spinner while the app
-  loads, then teal; during one, the dock's glass widens around it and the input picker and End
-  slide out from behind it. Its rings show only while the human speaks. An error rises in a
-  banner above the dock. The header's buttons, the dock, bubbles, capsules, pill and banner
-  share one glass (`SoftGlass`): a warm tint graded lighter at the top, a soft light along its
-  upper edge and, where it floats, a soft shadow. It is solid under Reduce Transparency and
-  outlined under Increase Contrast.
+  the microphone stands alone above the home indicator: hidden while the intro plays, then
+  fading in, gray with a spinner while the app still loads, then teal. During one, the dock's
+  glass widens around it and the input picker and End slide out from behind it. Its rings
+  show only while the human speaks. An error rises in a banner above the dock. The header's
+  buttons, the dock, bubbles, capsules, pill and banner share one glass (`SoftGlass`): a warm
+  tint graded lighter at the top, a soft light along its upper edge and, where it floats, a
+  soft shadow. It is solid under Reduce Transparency and outlined under Increase Contrast.
 - **New conversation:** the conversation clears at once, and a snapshot of the old screen is
   wiped away from the top behind a glowing edge that waves like the seam (`ResetWipe`), or
   fades under Reduce Motion. Core Animation runs it, so it keeps its pace while the
@@ -296,14 +296,17 @@ the angel and peach for the devil, with one soft point toward its speaker.
 - **The intro:** a launch's first stage frame introduces the characters (`StageIntro`) while
   Python and the models load. The faces start unseen, then the angel and the devil pop in
   beaming, springing past full size as each stretches tall and squashes wide; the pop is drawn
-  on top of the rig, so a re-measured screen never cuts it short. They notice each other, the
-  devil cackles and shoves the seam's middle up into the angel's half (she eeps), and she huffs
-  and shoves it back down (he oofs): each shover comes on top as the seam crosses into the
-  other's half, and the other is squashed and pushed away. A cheeky wink and a giggle later
-  they settle, the angel on top as at launch, about 3.3 s in. A conversation starting meanwhile
-  (`active` or `preparing`, as from a Shortcut) hands over at once: no more beats, anyone
-  unseen pops in, and the shove lets go on its spring. It plays once per launch, not on
-  returning from the background, and pauses with the scene.
+  on top of the rig, so a re-measured screen never cuts it short. They notice each other; the
+  devil sets his jaw (`determined`) and shoves, taking the floor as a speaker does: the seam
+  hands over to him and the angel is squished against it (she eeps) while he cackles. He lets
+  go, the seam is released, and she glares down at him and shoves back, taking the floor in
+  turn while he is squished (he oofs). Without a voice there is no talking, and the idle
+  drift eases out rather than collapsing. A cheeky wink and a giggle later they settle, the
+  angel on top as at launch, about 4.8 s in, and the microphone fades in. A conversation
+  starting meanwhile (`active` or `preparing`, as from a Shortcut) hands over at once: no
+  more beats, anyone unseen pops in, and a shover's floor is let go. It plays once per
+  launch, not on returning from the background, and pauses with the scene. Under Prefer
+  Cross-Fade Transitions its shoves and releases cross-fade, as a conversation's handovers do.
 - **The speaker's mouth:** the talking face's own mouth is lip sync's rest, a closed smile.
   Taking the floor, the speaker's mouth closes from the listener's on its springs, and lip
   sync takes over as the voice starts; a speaker keeping the floor in silence keeps it shut.

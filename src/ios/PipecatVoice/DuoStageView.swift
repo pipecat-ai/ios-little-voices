@@ -67,6 +67,8 @@ final class StageDriver {
     private(set) var held = PerCharacter(angel: FaceExpression.neutral, devil: .neutral)
     /// Changes whenever the stage goes to sleep with a new wake time.
     private(set) var wakeToken = 0
+    /// The launch intro is playing, or about to on the first frame: the microphone waits for it.
+    private(set) var introPlaying = true
 
     @ObservationIgnored private var sim: StageSimulation
     @ObservationIgnored private let seed: UInt64
@@ -129,6 +131,7 @@ final class StageDriver {
     func hold(_ pose: StagePose, captions: Bool) {
         still = (pose, captions)
         running = false
+        introPlaying = false
         rebuildStill()
     }
 
@@ -140,6 +143,7 @@ final class StageDriver {
         if inputs.active || inputs.preparing || inputs.floor != nil || inputs.userText != nil
             || !inputs.captions.isEmpty || !inputs.thinking.isEmpty {
             engaged = true
+            if introPlaying { introPlaying = false }
         }
         sim.receive(inputs, at: (suspendedAt ?? uptime) - offset)
         wake()
@@ -326,7 +330,11 @@ final class StageDriver {
         return running != activity.isRunning || (activity.isRunning && frameInterval != tierInterval)
             || layout != sim.layout || pendingSlots != sim.pendingSlots
             || held != sim.roles.map { CharacterDirector.expression(for: $1) }
+            || introPlaying != simIntroPlaying
     }
+
+    /// The simulation's intro is playing and no conversation has taken over the stage.
+    private var simIntroPlaying: Bool { sim.intro != nil && !engaged }
 
     private func schedulePublish() {
         guard !publishScheduled else { return }
@@ -343,6 +351,7 @@ final class StageDriver {
         if pendingSlots != sim.pendingSlots { pendingSlots = sim.pendingSlots }
         let expressions = sim.roles.map { CharacterDirector.expression(for: $1) }
         if held != expressions { held = expressions }
+        if introPlaying != simIntroPlaying { introPlaying = simIntroPlaying }
         if activity.isRunning {
             if frameInterval != tierInterval { frameInterval = tierInterval }
             if !running { running = true }
@@ -410,6 +419,8 @@ struct DuoStageView: View {
     /// Where the header ends and the footer starts, in window coordinates.
     let headerBottom: CGFloat
     let footerTop: CGFloat
+    /// Whether the launch intro is playing (`StageDriver.introPlaying`).
+    @Binding var introPlaying: Bool
     #if DEBUG
     /// A settled pose shown instead of the conversation (`--stage-pose`).
     var pose: StagePoseRequest?
@@ -487,6 +498,7 @@ struct DuoStageView: View {
             driver.receive(inputs, at: StageDriver.uptime)
         }
         .onChange(of: mode, initial: true) { _, mode in driver.update(mode: mode) }
+        .onChange(of: driver.introPlaying, initial: true) { _, playing in introPlaying = playing }
         .onChange(of: scenePhase, initial: true) { _, phase in
             driver.scene(active: phase == .active, at: StageDriver.uptime)
         }

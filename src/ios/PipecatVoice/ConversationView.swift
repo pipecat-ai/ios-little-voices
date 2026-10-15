@@ -15,6 +15,8 @@ struct ConversationView: View {
     @State private var footerTop: CGFloat = .infinity
     /// The screen New conversation is wiping away.
     @State private var resetWipe: ResetWipeSnapshot?
+    /// The launch intro is playing: the microphone fades in once it has.
+    @State private var introPlaying = true
 
     private var connecting: Bool { model.loading || model.preparing }
 
@@ -68,9 +70,10 @@ struct ConversationView: View {
     private var stage: some View {
         Group {
             #if DEBUG
-            DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop, pose: stagePose)
+            DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop, introPlaying: $introPlaying,
+                         pose: stagePose)
             #else
-            DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop)
+            DuoStageView(model: model, headerBottom: headerBottom, footerTop: footerTop, introPlaying: $introPlaying)
             #endif
         }
         .accessibilityElement(children: .contain)
@@ -131,6 +134,10 @@ struct ConversationView: View {
                                             removal: .opacity))
             }
             dock
+                .opacity(introPlaying ? 0 : 1)
+                .allowsHitTesting(!introPlaying)
+                .accessibilityHidden(introPlaying)
+                .animation(.easeInOut(duration: 0.5), value: introPlaying)
         }
         .frame(maxWidth: 520)
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 10)

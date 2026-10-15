@@ -1968,10 +1968,10 @@ extension StageRigChecks {
 
     // MARK: Idle drift
 
-    /// With nobody on the floor the seam flows in two slow waves, on the start screen as in a
-    /// conversation: level on average at every point and at every moment (no bowl or lean toward
-    /// either half), within the drift's amplitude of the band's middle and calm from frame to
-    /// frame, with its soft edge showing. Three minutes after the last input it settles into its
+    /// With nobody on the floor the seam is one smooth S that rolls and swells, on the start
+    /// screen as in a conversation: never more than one crest and one trough, level on average at
+    /// every point and at every moment (no bowl or lean toward either half), within the drift's
+    /// amplitude of the band's middle and calm from frame to frame, with its soft edge showing. Three minutes after the last input it settles into its
     /// still S-curve and the stage sleeps; an input or the app's return sets it flowing again
     /// without a jump. Under Reduce Motion it is the still S-curve.
     static func idleDrift() {
@@ -1982,10 +1982,15 @@ extension StageRigChecks {
         }
         // The seam's average height across the window (the trapezoid rule over its samples).
         func average(_ seam: [Double]) -> Double { (seam.reduce(0, +) - (seam[0] + seam[48]) / 2) / 48 }
-        // The flow's fastest rate at any point (band/s).
-        let calm = 2 * Double.pi * a * (SeamRig.driftWeights.0 / SeamRig.driftPeriods.0
-            + SeamRig.driftWeights.1 / SeamRig.driftPeriods.1)
-        check(SeamRig.driftPeriods.0 >= 7 && SeamRig.driftPeriods.1 >= 7, "the drift's periods are seconds long")
+        // Where the seam turns between rising and falling, in the window's middle 47 samples.
+        func turns(_ seam: [Double]) -> Int {
+            let slopes = zip(seam.dropFirst(), seam).map { $0 - $1 }.filter { abs($0) > 1e-9 }
+            return zip(slopes.dropFirst(), slopes).filter { ($0 > 0) != ($1 > 0) }.count
+        }
+        // The S's fastest rate at any point (band/s): its swell's and its roll's.
+        let calm = a * ((1 - SeamRig.driftSwell) * Double.pi / SeamRig.driftPeriods.swell
+            + 2 * Double.pi / SeamRig.driftPeriods.roll)
+        check(SeamRig.driftPeriods.roll >= 7 && SeamRig.driftPeriods.swell >= 7, "the drift's periods are seconds long")
         check(StageSimulation.driftTimeout == 180, "the drift rests after three idle minutes")
 
         // The start screen: no conversation; a tap at 200 s.
@@ -1994,6 +1999,7 @@ extension StageRigChecks {
         sim.settleAll()
         var sums = Array(repeating: 0.0, count: SeamRig.sampleCount), count = 0
         var reach = 0.0, middle = (low: Double.infinity, high: -Double.infinity), steepest = 0.0, unevenest = 0.0
+        var wiggliest = 0
         var previous: [Double]?, rested = 0, dozed = false, resumed = 0.0, resumeStep = 0.0, edge = 1.0
         var tapped = false
         for k in 1...(215 * 60) {
@@ -2015,6 +2021,7 @@ extension StageRigChecks {
                 middle = (min(middle.low, seam[24]), max(middle.high, seam[24]))
                 unevenest = max(unevenest, abs(average(seam) - 0.5))
                 steepest = max(steepest, step)
+                wiggliest = max(wiggliest, turns(seam))
             }
             if (192...199).contains(t) {
                 // Rested: the still S-curve, unmoving, and the stage asleep between peeks.
@@ -2032,12 +2039,13 @@ extension StageRigChecks {
         let bias = sums.map { abs($0 / Double(count) - 0.5) }.max()!
         check(bias <= 0.001, "the idle seam is level on average all along (largest bias \(bias) band)")
         check(unevenest <= 1e-9, "the idle seam splits the band evenly at every moment (\(unevenest))")
+        check(wiggliest <= 2, "the idle seam is one S at most (\(wiggliest) turns)")
         check(reach <= a + 1e-9 && reach >= 0.7 * a, "the idle drift reaches \(reach) band from the middle")
         check((middle.high - middle.low) * m.bandHeight >= 15, "the idle seam flows (\(middle.high - middle.low) band)")
         check(steepest <= calm / 60 + 1e-9, "the idle seam moves \(steepest * m.bandHeight) pt a frame at most")
         check(edge >= 1 - 1e-9, "the seam's soft edge shows at rest (\(edge))")
         check(rested > 60 * 6 && dozed, "after three idle minutes the seam rests (\(rested) frames) and the stage dozes (\(dozed))")
-        // Setting off, the still S-curve eases into the flowing waves over a few seconds.
+        // Setting off, the still S eases into its roll and swell over a few seconds.
         check(resumeStep * m.bandHeight <= 1 && resumed * m.bandHeight >= 3,
               "a tap sets the seam flowing again smoothly (\(resumeStep * m.bandHeight) pt a frame at most)")
 
@@ -2521,7 +2529,7 @@ extension StageRigChecks {
                 }
             }
         }
-        check(FaceExpression.allCases.count == 17, "17 expressions")
+        check(FaceExpression.allCases.count == 18, "18 expressions")
         check(GalleryCell.all.count == 12 && Set(GalleryCell.all.map(\.name)).count == 12, "12 gallery cells")
         for cell in GalleryCell.all {
             let still = StageSimulation.snapshot(cell: cell, metrics: m).frame
@@ -3517,18 +3525,20 @@ extension StageRigChecks {
             let seam = frame.picture.seam.enumerated().map { Vec2(m.x(Double($0.offset) / 48), m.y($0.element)) }
             let points = DuoCharacter.allCases.flatMap { StageRigChecks.landmarks(frame.picture.faces[$0]) } + seam
             if let last {
+                // The frame's length in 120ths of a second.
+                let frames = max(1, (time - last.time) * 120)
                 steps.append(zip(points, last.points).map { ($0 - $1).length })
                 if steps.count == 3 {
+                    // A jump moves more than 3 pt per 120th of a second, far more than the frames
+                    // either side: a fast bounce sampled at a low rate keeps within it.
                     let (before, step, after) = (steps[0], steps[1], steps[2])
-                    for i in step.indices where step[i] > 3 && step[i] > 4 * max(before[i], after[i]) + 0.5 {
+                    for i in step.indices where step[i] > 3 * frames && step[i] > 4 * max(before[i], after[i]) + 0.5 {
                         check(false, "\(at): landmark \(i) jumped \(step[i]) pt in the frame before "
                             + "(\(before[i]) and \(after[i]) either side)")
                     }
                     jumpsChecked += 1
                     steps.removeFirst()
                 }
-                // The frame's length in 120ths of a second.
-                let frames = max(1, (time - last.time) * 120)
                 for c in DuoCharacter.allCases {
                     let a = last.faces[c], b = frame.picture.faces[c]
                     check(abs(b.pop.size - a.pop.size) <= 20 * (time - last.time) + 1e-9,
@@ -3547,8 +3557,8 @@ extension StageRigChecks {
     }
 
     /// The gestures only the intro starts here: with no conversation, nothing else pops in,
-    /// shoves, squishes, cackles, huffs or winks, and the idle stage's first glance is 8 s off.
-    private static let introGestures: Set<StageGesture> = [.popIn, .glance, .laughAlong, .shove, .squish, .huff,
+    /// shoves, squishes, cackles or winks, and the idle stage's first glance is 8 s off.
+    private static let introGestures: Set<StageGesture> = [.popIn, .glance, .laughAlong, .shove, .squish,
                                                            .cheekyWink]
 
     private static func isIntroGesture(_ record: StageEventRecord) -> Bool {
@@ -3568,17 +3578,17 @@ extension StageRigChecks {
     // MARK: Intro
 
     /// The launch intro (`StageIntro`): the faces start unseen and pop in past full size,
-    /// stretching tall and squashing wide; they notice each other and shove each other along the
-    /// seam, each coming on top as it bows into the other's half and the other squished and
-    /// pushed away; then they make up and settle into the idle stage, the angel on top as at
-    /// launch, in 2.5–4 s. It never jumps, on any device or at any cadence, and replays exactly; a
+    /// stretching tall and squashing wide; they notice each other and shove each other in turn,
+    /// each taking the floor as a speaker does, coming on top as the seam sweeps deep into the
+    /// other's half and the other squished and pushed away; then they make up and settle into the
+    /// idle stage, the angel on top as at launch, in 4–5 s. It never jumps, on any device or at any cadence, and replays exactly; a
     /// conversation starting at any moment hands it over smoothly; it plays once and pauses with
     /// the scene; and under Reduce Motion the faces fade in, unmoving.
     static func intro() {
         let m = StageMetrics.iPhone18Pro
         let beats = StageIntro.beats
 
-        // The choreography: in order and 2.5–4 s long; the devil starts the shoving and the angel
+        // The choreography: in order and 4–5 s long; the devil starts the shoving and the angel
         // has the last shove.
         check(zip(beats, beats.dropFirst()).allSatisfy { $0.time <= $1.time }, "the intro's beats are in order")
         let length = beats.map { time, beat -> Double in
@@ -3587,7 +3597,7 @@ extension StageRigChecks {
             case .windUp, .shove, .letGo: time
             }
         }.max()!
-        check((2.5...4).contains(length), "the intro lasts \(length) s")
+        check((4...5).contains(length), "the intro lasts \(length) s")
         let shovers = beats.compactMap { beat -> DuoCharacter? in
             if case .shove(let c) = beat.beat { c } else { nil }
         }
@@ -3620,9 +3630,11 @@ extension StageRigChecks {
             var seen = PerCharacter<Double?>(angel: nil, devil: nil)
             var peak = PerCharacter(angel: 0.0, devil: 0.0)
             var tallest = PerCharacter(angel: 1.0, devil: 1.0), widest = PerCharacter(angel: 1.0, devil: 1.0)
-            var bowed = (down: 0.0, up: 0.0)
+            // The seam's centre at its lowest and highest, in band fractions.
+            var swept = (down: 0.5, up: 0.5)
             var pushed = PerCharacter(angel: 0.0, devil: 0.0)
-            let run = perform(StageScript(duration: 6), seed: seed, until: 5.9, intro: true) { time, frame, sim in
+            let rest = introduced(seed: seed, metrics: m).layout
+            let run = perform(StageScript(duration: 7.5), seed: seed, until: 7.4, intro: true) { time, frame, sim in
                 watch.see(frame, at: time)
                 events += sim.drainEvents()
                 for c in DuoCharacter.allCases {
@@ -3632,11 +3644,12 @@ extension StageRigChecks {
                     peak[c] = max(peak[c], pose.pop.size)
                     tallest[c] = max(tallest[c], pose.pop.squash)
                     widest[c] = min(widest[c], pose.pop.squash)
-                    // How far the face rode away from the seam: the devil down, the angel up.
-                    let rode = pose.anchor.y - sim.layout[c].anchor.y
+                    // How far the face was pushed from where it rests: the devil down, the angel up.
+                    let rode = pose.anchor.y - rest[c].anchor.y
                     pushed[c] = max(pushed[c], c == .devil ? rode : -rode)
                 }
-                bowed = (max(bowed.down, sim.seam.shove.value), min(bowed.up, sim.seam.shove.value))
+                let centre = sim.seam.value(at: 0.5)
+                swept = (max(swept.down, centre), min(swept.up, centre))
                 if time < beats.last!.time {
                     check(sim.needsFrames && sim.activity == .transition,
                           "\(label): the intro runs at the display's rate (\(sim.activity) at \(time) s)")
@@ -3655,14 +3668,14 @@ extension StageRigChecks {
                 if case .flipped(let c) = record.event { c } else { nil }
             }
             check(flips == [.devil, .angel], "\(label): each shover comes on top (\(flips))")
-            check(bowed.down >= 0.06 && bowed.up <= -0.06,
-                  "\(label): the shoves bow the seam into each half (\(bowed))")
+            check(swept.down >= 0.62 && swept.up <= 0.44,
+                  "\(label): the shoves sweep the seam deep into each half (\(swept))")
             check(pushed.devil >= 10 && pushed.angel >= 10, "\(label): each shoved face is pushed away (\(pushed))")
             check(watch.jumpsChecked > 600, "\(label): \(watch.jumpsChecked) frames watched")
 
             // Over, the faces rest as they would without the intro, the angel on top, and the seam
             // rests in its shape, only the idle drift flowing on it.
-            let plain = perform(StageScript(duration: 6), seed: seed, until: 5.9) { _, _, _ in }
+            let plain = perform(StageScript(duration: 7.5), seed: seed, until: 7.4) { _, _, _ in }
             check(run.intro == nil && run.frame.picture.dominant == .angel,
                   "\(label): the intro is over, the angel on top")
             check(run.roles == plain.roles && run.activity != .transition,
@@ -3675,19 +3688,17 @@ extension StageRigChecks {
                 near(a.sy, b.sy, 2e-3, "\(label): \(c)'s settled squash")
                 near(a.tilt, b.tilt, 1e-3, "\(label): \(c)'s settled tilt")
             }
-            check(run.seam.isMotionSettled && run.seam.shape == run.layout.seam && abs(run.seam.shove.value) < 1e-4
-                      && run.seam.rippleMagnitude < 1e-4, "\(label): the seam rests in its shape")
+            check(run.seam.isMotionSettled && run.seam.shape == run.layout.seam && run.seam.rippleMagnitude < 1e-4,
+                  "\(label): the seam rests in its shape")
         }
 
-        // On every device, at 30, 60 and 120 Hz, and with Prefer Cross-Fade Transitions, which
-        // keeps the intro's motion, nothing jumps.
+        // On every device, at 30, 60 and 120 Hz, nothing jumps.
         let devices: [StageMetrics] = [.iPhoneSE, .iPhone18Pro, .iPhoneProMax, .iPadPortrait, .iPadLandscape]
         var watched = 0
         for (i, device) in devices.enumerated() {
             for hz in [30.0, 60, 120] {
-                let mode = hz == 60 && i % 2 == 0 ? StageMode(crossFadeOnly: true) : StageMode()
                 var watch = SmoothWatch("the intro on a \(device.width)-pt stage at \(Int(hz)) Hz", metrics: device)
-                perform(StageScript(duration: 5), seed: UInt64(20 + i), metrics: device, mode: mode, hz: hz,
+                perform(StageScript(duration: 6), seed: UInt64(20 + i), metrics: device, hz: hz,
                         intro: true) { time, frame, _ in
                     watch.see(frame, at: time)
                 }
@@ -3695,6 +3706,18 @@ extension StageRigChecks {
             }
         }
         check(watched > 5000, "the devices' intros were watched over \(watched) frames")
+
+        // With Prefer Cross-Fade Transitions each shove and letting go is a cross-fade, as a
+        // conversation's handovers are.
+        var crossFaded = introduced(seed: 4, mode: StageMode(crossFadeOnly: true))
+        let floorBeats = beats.compactMap { time, beat -> Double? in
+            switch beat {
+            case .shove, .letGo: time
+            default: nil
+            }
+        }
+        let shoves = fadeRun(&crossFaded, script: StageScript(duration: 6), until: 6, fromSettled: false)
+        checkFades(shoves.fades, starts: floorBeats, "Prefer Cross-Fade Transitions' intro")
 
         // Any cadence draws the same frames at the same times: a digest every 0.25 s.
         let quarters = (1...24).map { Double($0) / 4 }
@@ -3732,10 +3755,11 @@ extension StageRigChecks {
         }
 
         // A conversation starting at any moment (active, or preparing too) hands over smoothly:
-        // from then on no beat runs, anyone unseen pops in at once, the shove lets go, and the
+        // from then on no beat runs, anyone unseen pops in at once, a shover's floor is let go, and the
         // intro is over once the pops are.
         var handovers = 0
-        for (k, at) in stride(from: 0.0, through: 3.6, by: 0.05).enumerated() {
+        let moments = Array(stride(from: 0.0, through: 4.8, by: 0.05))
+        for (k, at) in moments.enumerated() {
             var script = StageScript(duration: at + 4)
             script.at(at) {
                 $0.active = true
@@ -3756,7 +3780,7 @@ extension StageRigChecks {
                     return
                 }
                 events += drained
-                check(sim.seam.shove.target == 0 && sim.intro?.shover == nil, "\(label): the shove lets go")
+                check(sim.preset.speaker == nil || sim.stageFloor != nil, "\(label): the shover's floor is let go")
                 if time >= start + FacePop.duration {
                     check(sim.intro == nil && frame.picture.faces.angel.pop == FacePop()
                               && frame.picture.faces.devil.pop == FacePop(), "\(label): the intro is over at \(time) s")
@@ -3775,11 +3799,11 @@ extension StageRigChecks {
             }
             handovers += 1
         }
-        check(handovers == 73, "\(handovers) hand-overs")
+        check(handovers == moments.count, "\(handovers) hand-overs")
 
         // A whole conversation starting mid-intro, as a scripted run's tap on the microphone may:
         // the human asks, the angel answers and the devil replies, handovers both ways.
-        for (k, at) in [0.1, 0.5, 1.2, 1.45, 1.6, 2.1, 2.7].enumerated() {
+        for (k, at) in [0.1, 0.5, 1.2, 1.45, 1.6, 2.1, 2.7, 3.2].enumerated() {
             var c = StageConversation(duration: at + 10)
             c.activate(at: at)
             let final = c.ask("Should I go to the gym tonight?", at: at + 0.4, addressed: [.angel])
@@ -3791,7 +3815,10 @@ extension StageRigChecks {
             var impacts = 0
             perform(c.script(seed: UInt64(k)), seed: UInt64(k), intro: true) { time, frame, sim in
                 watch.see(frame, at: time)
-                impacts += sim.drainEvents().filter { if case .impact = $0.event { true } else { false } }.count
+                // The intro's own shoves land impacts before the conversation starts.
+                impacts += sim.drainEvents().filter {
+                    if case .impact = $0.event { $0.time >= at } else { false }
+                }.count
             }
             check(impacts == 2,
                   "a conversation from \(at) s hands over to the angel and the devil (\(impacts) impacts)")
