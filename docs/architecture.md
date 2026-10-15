@@ -329,8 +329,8 @@ the angel and peach for the devil, with one soft point toward its speaker.
   error as it appears. Captions, the pill and the banner grow with Dynamic Type up to the
   second accessibility size; the round buttons keep their size and show their titles in the
   large content viewer.
-- **Appearance:** the app is light unless Settings → Appearance → Dark mode is on, which uses
-  a dusk palette for the stage and its chrome.
+- **Appearance:** the app is always light, Settings and system UI included, whatever the
+  system's appearance; the stage and its chrome share one palette.
 - **Scripted runs:** Debug builds play scripted conversations on the real stage, with
   synthetic mouths and microphone level and no model (`--stage-script <name>`): the intro
   (`intro`, its faces unseen until the script starts) and a conversation starting during it

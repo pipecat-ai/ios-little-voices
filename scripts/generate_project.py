@@ -306,6 +306,8 @@ def main():
             "UIInterfaceOrientationLandscapeLeft",
             "UIInterfaceOrientationLandscapeRight",
         ],
+        # Always light, so Settings and system UI match the stage's palette.
+        "UIUserInterfaceStyle": "Light",
     }
     (ROOT / "src/ios/PipecatVoice/Info.plist").write_bytes(plistlib.dumps(info))
     print("Generated PipecatVoice.xcodeproj")

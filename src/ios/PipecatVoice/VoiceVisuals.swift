@@ -1,10 +1,8 @@
 import SwiftUI
 
 enum VoicePalette {
-    /// Settings' accent, lighter in dark mode so it stays legible on the toolbar's glass.
-    static let blue = Color(uiColor: UIColor { $0.userInterfaceStyle == .dark
-        ? UIColor(red: 0.42, green: 0.66, blue: 1, alpha: 1)
-        : UIColor(red: 0.08, green: 0.36, blue: 0.87, alpha: 1) })
+    /// Settings' accent.
+    static let blue = Color(red: 0.08, green: 0.36, blue: 0.87)
 }
 
 /// Which of the palette's grades a glass surface takes.

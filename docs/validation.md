@@ -78,8 +78,9 @@ None of these has been run against the current app yet:
 - [ ] `--benchmark-phonon`, built with `SWIFT_OPTIMIZATION_LEVEL=-O`, logs
       `PHONON_BENCHMARK_COMPLETE`.
 - [ ] A Release build ignores the debug launch arguments.
-- [ ] Settings: your name and contact, dark mode, the voices (Freya and Reuben), the credits,
-      and "Hey Little Voices" with Vocal Shortcuts.
+- [ ] Settings: your name and contact, the voices (Freya and Reuben), the credits, and
+      "Hey Little Voices" with Vocal Shortcuts.
+- [ ] With the system in Dark Mode, the stage, the dock and Settings stay light.
 - [ ] Control Center screen recording captures the characters with its microphone off, and
       you too with it on.
 

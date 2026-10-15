@@ -443,7 +443,6 @@ struct DuoStageView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.displayScale) private var displayScale
 
@@ -475,7 +474,7 @@ struct DuoStageView: View {
 
     var body: some View {
         let inputs = inputs
-        let palette = StagePalette(colorScheme: colorScheme, contrast: contrast, reduceTransparency: reduceTransparency)
+        let palette = StagePalette(contrast: contrast, reduceTransparency: reduceTransparency)
         GeometryReader { proxy in
             let metrics = StageMetrics(size: Vec2(proxy.size.width, proxy.size.height),
                                        globalMinY: proxy.frame(in: .global).minY, headerBottom: headerBottom,

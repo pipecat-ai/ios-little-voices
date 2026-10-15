@@ -86,13 +86,12 @@ struct StagePoseRequest: Equatable {
 
 /// The palette for the current environment.
 private struct StagePaletteReader<Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @ViewBuilder var content: (StagePalette) -> Content
 
     var body: some View {
-        content(StagePalette(colorScheme: colorScheme, contrast: contrast, reduceTransparency: reduceTransparency))
+        content(StagePalette(contrast: contrast, reduceTransparency: reduceTransparency))
     }
 }
 

@@ -67,7 +67,7 @@ enum StageRenderer {
             } else {
                 let shadow = colors.contactShadow[dominant]
                 for (width, alpha) in zip(shadowStrokes.widths, shadowStrokes.alphas) {
-                    let a = min(1, alpha * colors.contactShadowAlphaScale * picture.shadow)
+                    let a = min(1, alpha * picture.shadow)
                     layer.stroke(seam, with: .color(palette.color(shadow.alpha(a))), lineWidth: width * s)
                 }
             }
@@ -656,15 +656,6 @@ private struct FaceDrawing {
                 var sprite = layer
                 sprite.opacity = min(1, h.glow)
                 sprite.draw(glow.image, in: CGRect(x: -extent.x / 2, y: -extent.y / 2, width: extent.x, height: extent.y))
-            }
-            if let light = colors.haloLight {
-                // A circular gradient squashed into the ellipse, so it fades to nothing at its edge.
-                let r = colors.haloLightRadiusFu
-                var glowLayer = layer
-                glowLayer.scaleBy(x: 1, y: 0.6)
-                glowLayer.fill(Path(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r)),
-                               with: .radialGradient(Gradient(colors: [palette.color(light), palette.color(light.alpha(0))]),
-                                                     center: .zero, startRadius: 0, endRadius: r))
             }
             // Just the rim: the glow shows through the ring's middle.
             let (outer, hole) = AngelGeometry.haloRing()

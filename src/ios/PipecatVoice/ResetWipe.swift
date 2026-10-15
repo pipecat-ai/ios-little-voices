@@ -37,7 +37,7 @@ struct ResetWipeView: UIViewRepresentable {
 
     func updateUIView(_ view: ResetWipeLayerView, context: Context) {
         let environment = context.environment
-        view.configure(image: snapshot.image, reduceMotion: reduceMotion, dark: environment.colorScheme == .dark,
+        view.configure(image: snapshot.image, reduceMotion: reduceMotion,
                        reduceTransparency: environment.accessibilityReduceTransparency, finished: finished)
     }
 }
@@ -51,7 +51,6 @@ final class ResetWipeLayerView: UIView {
     private let line = CAShapeLayer()
     private var image: UIImage?
     private var reduceMotion = false
-    private var dark = false
     private var reduceTransparency = false
     private var finished: () -> Void = {}
     private var started = false
@@ -64,11 +63,9 @@ final class ResetWipeLayerView: UIView {
     /// How far the waves roll sideways while the edge crosses the screen, in wavelengths.
     private static let roll: CGFloat = 0.75
 
-    func configure(image: UIImage, reduceMotion: Bool, dark: Bool, reduceTransparency: Bool,
-                   finished: @escaping () -> Void) {
+    func configure(image: UIImage, reduceMotion: Bool, reduceTransparency: Bool, finished: @escaping () -> Void) {
         self.image = image
         self.reduceMotion = reduceMotion
-        self.dark = dark
         self.reduceTransparency = reduceTransparency
         self.finished = finished
         setNeedsLayout()
@@ -123,12 +120,12 @@ final class ResetWipeLayerView: UIView {
                 // Shadows of the edge's outline alone: a wide soft glow under a brighter line.
                 glow.shadowPath = edge.copy(strokingWithWidth: 28, lineCap: .round, lineJoin: .round, miterLimit: 1)
                 glow.shadowColor = UIColor(red: 1, green: 0.93, blue: 0.7, alpha: 1).cgColor
-                glow.shadowOpacity = dark ? 0.5 : 0.7
+                glow.shadowOpacity = 0.7
                 glow.shadowRadius = 14
                 glow.shadowOffset = .zero
                 line.shadowPath = edge.copy(strokingWithWidth: 4, lineCap: .round, lineJoin: .round, miterLimit: 1)
                 line.shadowColor = UIColor.white.cgColor
-                line.shadowOpacity = dark ? 0.7 : 0.9
+                line.shadowOpacity = 0.9
                 line.shadowRadius = 2
                 line.shadowOffset = .zero
                 edgeLayers = [glow, line]

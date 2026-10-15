@@ -79,9 +79,9 @@ struct PerCharacter<Value: Sendable>: Sendable {
 
 extension PerCharacter: Equatable where Value: Equatable {}
 
-/// The stage's colours as plain RGBA tables: light, and "dusk" for a dark colour scheme, plus
-/// the Reduce Transparency and Increase Contrast variants. `StagePalette` turns these into
-/// SwiftUI colours; the contrast checks read them directly.
+/// The stage's colours as plain RGBA tables, plus the Reduce Transparency and Increase Contrast
+/// variants. `StagePalette` turns these into SwiftUI colours; the contrast checks read them
+/// directly.
 struct StageColors: Equatable, Sendable {
     /// The angel's half: an elliptical radial about her eye midpoint + (0, −120 fu), at her halo,
     /// radii 1 × 1.05 stage widths. A pale glow about her halo and face turns a deeper yellow
@@ -106,9 +106,6 @@ struct StageColors: Equatable, Sendable {
     /// The pre-rendered halo glow; nil draws no sprite (Reduce Transparency).
     var haloGlow: RGBA?
     var haloGlowBlurFu: Double
-    /// A soft light around the halo in the dark scheme, radius `haloLightRadiusFu`.
-    var haloLight: RGBA?
-    var haloLightRadiusFu: Double
     /// A crisp outline replacing the glow under Reduce Transparency.
     var haloOutline: RGBA?
     /// Wing fill from the hinge out to the tip: palest by the hinge, a warmer cream at the tip.
@@ -128,8 +125,6 @@ struct StageColors: Equatable, Sendable {
     var rim: PerCharacter<[RGBA]>
     /// The contact shadow on the recessive side, keyed by the dominant character.
     var contactShadow: PerCharacter<RGBA>
-    /// Multiplies the contact-shadow stroke alphas.
-    var contactShadowAlphaScale: Double
     /// Replaces the shadow strokes with one opaque 2-pt line (Reduce Transparency), keyed by
     /// the dominant character.
     var contactLine: PerCharacter<RGBA>?
@@ -212,8 +207,6 @@ struct StageColors: Equatable, Sendable {
         // Warm gold, so the white ring stands out against the angel's yellow.
         haloGlow: RGBA(0xFFD447, alpha: 0.85),
         haloGlowBlurFu: 12,
-        haloLight: nil,
-        haloLightRadiusFu: 160,
         haloOutline: nil,
         wingFill: [GradientStop(0, RGBA(0xFDFBE9, alpha: 0.94)), GradientStop(1, RGBA(0xFBF5D7, alpha: 0.9))],
         horn: [GradientStop(0, RGBA(0x6E1F12)), GradientStop(0.25, RGBA(0x58190F)), GradientStop(0.5, RGBA(0x3E120B)),
@@ -225,7 +218,6 @@ struct StageColors: Equatable, Sendable {
         rim: PerCharacter(angel: [RGBA(0xFDC54F, alpha: 0.35), RGBA(0xFDC54F, alpha: 0.5)],
                           devil: [RGBA(0xFF9A3C, alpha: 0.5)]),
         contactShadow: PerCharacter(angel: RGBA(0x8E1E08), devil: RGBA(0xB8902F)),
-        contactShadowAlphaScale: 1,
         contactLine: nil,
         seamGlow: PerCharacter(angel: Array(repeating: RGBA(0xF8B83E, alpha: 0.075), count: 6),
                                devil: Array(repeating: RGBA(0x8E1E08, alpha: 0.022), count: 6)),
@@ -255,72 +247,11 @@ struct StageColors: Equatable, Sendable {
         seamLine: nil,
         opaque: false)
 
-    /// "Dusk": mid-tone near the faces, dark at the edges.
-    static let dusk = StageColors(
-        angelHalf: [GradientStop(0, RGBA(0xB8924A)), GradientStop(0.3, RGBA(0xA88238)),
-                    GradientStop(0.5, RGBA(0x9A7330)), GradientStop(0.8, RGBA(0x6E5020)),
-                    GradientStop(1, RGBA(0x4E3612))],
-        devilHalf: [GradientStop(0, RGBA(0xD2621C)), GradientStop(0.31, RGBA(0xC24A1A)),
-                    GradientStop(0.48, RGBA(0xB8401A)), GradientStop(0.66, RGBA(0x8A2C12)),
-                    GradientStop(0.85, RGBA(0x5E1A0B)), GradientStop(1, RGBA(0x3A0A06))],
-        ink: PerCharacter(angel: RGBA(0x1A0C04), devil: RGBA(0x120502)),
-        tongue: PerCharacter(angel: RGBA(0xD9634A), devil: RGBA(0xD9634A)),
-        blush: PerCharacter(angel: RGBA(0xE8A848, alpha: 0.75), devil: RGBA(0xF08A64, alpha: 0.38)),
-        highlight: PerCharacter(angel: RGBA(0xFFFFFF), devil: RGBA(0xFFF8EE)),
-        sclera: PerCharacter(angel: RGBA(0xF5EEDC), devil: RGBA(0xF2E2C6)),
-        devilScleraShade: RGBA(0xC98A5A, alpha: 0.7),
-        fang: RGBA(0xF6EEE2),
-        haloRing: RGBA(0xFFF4C8),
-        haloGlow: RGBA(0xFFE58A),
-        haloGlowBlurFu: 20,
-        haloLight: RGBA(0xFFE58A, alpha: 0.18),
-        haloLightRadiusFu: 160,
-        haloOutline: nil,
-        wingFill: [GradientStop(0, RGBA(0xF7EBC8, alpha: 0.8)), GradientStop(1, RGBA(0xF7EBC8, alpha: 0.65))],
-        horn: [GradientStop(0, RGBA(0x4A150C)), GradientStop(0.3, RGBA(0x36100A)), GradientStop(0.6, RGBA(0x220905)),
-               GradientStop(1, RGBA(0x1C0704))],
-        hornShine: RGBA(0xB8441F),
-        angelDashes: RGBA(0xFFE9A8),
-        devilMotionMarks: RGBA(0xF0B040),
-        devilAngerVein: RGBA(0xA81C14),
-        // As in light, the angel's wide stroke has 0.7 × the alpha of her narrow one.
-        rim: PerCharacter(angel: [RGBA(0xC9A24A, alpha: 0.42), RGBA(0xC9A24A, alpha: 0.6)],
-                          devil: [RGBA(0xE07030, alpha: 0.5)]),
-        contactShadow: PerCharacter(angel: RGBA(0x1A0503), devil: RGBA(0x1A1405)),
-        contactShadowAlphaScale: 1.4,
-        contactLine: nil,
-        seamGlow: PerCharacter(angel: Array(repeating: RGBA(0xD4AA4E, alpha: 0.08), count: 6),
-                               devil: Array(repeating: RGBA(0x1A0503, alpha: 0.05), count: 6)),
-        dots: PerCharacter(angel: RGBA(0xF6D77A), devil: RGBA(0xFF8A4C)),
-        bubbleTint: PerCharacter(angel: RGBA(0x3A2A12, alpha: 0.66), devil: RGBA(0x4A180C, alpha: 0.58)),
-        pillTint: RGBA(0x2A1E10, alpha: 0.62),
-        pillText: RGBA(0xFFF3D6),
-        pillPendingText: RGBA(0xE3CBA6),
-        bubbleText: PerCharacter(angel: RGBA(0xFFF3D6), devil: RGBA(0xFFE4D4)),
-        bannerTint: RGBA(0x2E1A10, alpha: 0.9),
-        bannerText: RGBA(0xFFE9D6),
-        bannerGlyph: RGBA(0xFF8A70),
-        bubbleShadow: RGBA(0x000000, alpha: 0.22),
-        bubbleStrokeAlpha: 0,
-        glassEdgeLight: RGBA(0xFFFFFF, alpha: 0.3),
-        chromeGrade: GlassGrade(top: 1.3, bottom: 0.75),
-        captionGrade: GlassGrade(top: 1.12, bottom: 0.9),
-        chromeGlass: PerCharacter(angel: RGBA(0x6A5020, alpha: 0.5), devil: RGBA(0x7A2A10, alpha: 0.5)),
-        chromeGlyph: PerCharacter(angel: RGBA(0xFFF1CC), devil: RGBA(0xFFE2CE)),
-        dockButton: RGBA(0xB0582C, alpha: 0.45),
-        micFill: [GradientStop(0, RGBA(0x2BB492)), GradientStop(0.55, RGBA(0x1A977A)), GradientStop(1, RGBA(0x0B6E5A))],
-        micMutedFill: [GradientStop(0, RGBA(0xDA5850)), GradientStop(0.55, RGBA(0xBF3E3F)), GradientStop(1, RGBA(0x962530))],
-        micLoadingFill: [GradientStop(0, RGBA(0x968D84)), GradientStop(0.55, RGBA(0x7A726A)), GradientStop(1, RGBA(0x58514B))],
-        micGlow: RGBA(0xFFD9B0, alpha: 0.24),
-        inkStrokeScale: 1,
-        seamLine: nil,
-        opaque: false)
-
-    /// The colours for an appearance.
-    static func resolve(dark: Bool, reduceTransparency: Bool, increaseContrast: Bool) -> StageColors {
-        var colors = dark ? dusk : light
+    /// The colours with Increase Contrast and Reduce Transparency applied as set.
+    static func resolve(reduceTransparency: Bool, increaseContrast: Bool) -> StageColors {
+        var colors = light
         if increaseContrast { colors = colors.increasingContrast() }
-        if reduceTransparency { colors = colors.reducingTransparency(dark: dark) }
+        if reduceTransparency { colors = colors.reducingTransparency() }
         return colors
     }
 
@@ -349,15 +280,14 @@ struct StageColors: Equatable, Sendable {
     /// blush, marks and rims pre-mixed over the half they sit on, one opaque contact line (ink
     /// mixed 25% into the recessive half), solid bubbles and chrome with no grading, edge light
     /// or shadow. Every colour ends up opaque.
-    func reducingTransparency(dark: Bool) -> StageColors {
+    func reducingTransparency() -> StageColors {
         var colors = self
         let face = PerCharacter(angel: Self.sample(angelHalf, at: 0), devil: Self.sample(devilHalf, at: 0))
         // Between each face and the seam, where the bubbles sit.
         let atSeam = PerCharacter(angel: Self.sample(angelHalf, at: 0.55), devil: Self.sample(devilHalf, at: 0.3))
-        let wing = RGBA(dark ? 0xE8DCB8 : 0xFFF7E1)
+        let wing = RGBA(0xFFF7E1)
         colors.wingFill = [GradientStop(0, wing), GradientStop(1, wing)]
         colors.haloGlow = nil
-        colors.haloLight = nil
         colors.haloOutline = RGBA(0xE8C35A)
         colors.haloRing = Self.composite(haloRing, over: face.angel)
         colors.blush = blush.map { c, color in Self.composite(color, over: face[c]) }
@@ -400,9 +330,9 @@ struct StageColors: Equatable, Sendable {
         colors.chromeGrade = .flat
         colors.captionGrade = .flat
         // Without its edge light and shadow the solid chrome would sink into its half, so it
-        // steps a third of the way toward white (black at dusk) to keep its shape.
+        // steps a third of the way toward white to keep its shape.
         let chrome = PerCharacter(angel: Self.sample(angelHalf, at: 0.6), devil: Self.sample(devilHalf, at: 0.6))
-        let lift = RGBA(dark ? 0x000000 : 0xFFFFFF)
+        let lift = RGBA(0xFFFFFF)
         colors.chromeGlass = chromeGlass.map { c, color in RGBA.mix(Self.composite(color, over: chrome[c]), lift, 0.35) }
         colors.dockButton = Self.composite(dockButton, over: colors.chromeGlass.devil)
         colors.bannerTint = Self.composite(bannerTint, over: chrome.devil)

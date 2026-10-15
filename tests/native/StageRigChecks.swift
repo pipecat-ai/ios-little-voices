@@ -606,75 +606,73 @@ enum StageRigChecks {
 
     static func palette() {
         let sampled = stride(from: 0.0, through: 0.45, by: 0.01)
-        for (name, colors, minimum) in [("light", StageColors.light, 4.5), ("dusk", StageColors.dusk, 3.0)] {
-            for character in DuoCharacter.allCases {
-                let half = character == .angel ? colors.angelHalf : colors.devilHalf
-                for position in sampled {
-                    let ratio = StageColors.contrast(colors.ink[character], StageColors.sample(half, at: position))
-                    check(ratio >= minimum,
-                          "\(name) \(character) ink contrast \(ratio) < \(minimum) at radial position \(position)")
-                }
-                let variants = [colors, colors.increasingContrast(), colors.reducingTransparency(dark: name == "dusk")]
-                // Typing dots against the character's bubble, at its grade's densest and
-                // thinnest edges, over any part of the half (solid under Reduce Transparency).
-                for variant in variants {
-                    for edge in [0.0, 1.0] {
-                        let tint = variant.captionGrade.tint(variant.bubbleTint[character], at: edge)
-                        for position in stride(from: 0.0, through: 1.0, by: 0.05) {
-                            let bubble = StageColors.composite(tint, over: StageColors.sample(half, at: position))
-                            let ratio = StageColors.contrast(colors.dots[character], bubble)
-                            check(ratio >= 3, "\(name) \(character) dots contrast \(ratio) at \(position), edge \(edge)")
-                            // Caption text is body size, so it needs 4.5:1 on its bubble.
-                            let text = StageColors.contrast(colors.bubbleText[character], bubble)
-                            check(text >= 4.5, "\(name) \(character) caption contrast \(text) at \(position), edge \(edge)")
-                        }
-                    }
-                }
-                // The chrome's glyphs (3:1, as icons) on its glass at either edge of its grade,
-                // over any part of its half: the header's buttons over the angel's, the dock and
-                // its side buttons over the devil's.
-                for chrome in variants {
-                    for edge in [0.0, 1.0] {
-                        for position in stride(from: 0.0, through: 1.0, by: 0.05) {
-                            let tint = chrome.chromeGrade.tint(chrome.chromeGlass[character], at: edge)
-                            var glass = StageColors.composite(tint, over: StageColors.sample(half, at: position))
-                            if character == .devil {
-                                glass = StageColors.composite(chrome.chromeGrade.tint(chrome.dockButton, at: edge), over: glass)
-                            }
-                            let ratio = StageColors.contrast(chrome.chromeGlyph[character], glass)
-                            check(ratio >= 3, "\(name) \(character) chrome glyph contrast \(ratio) at \(position), edge \(edge)")
-                        }
-                    }
-                }
-                // The human's words, final or still being recognized (body size, 4.5:1), on the
-                // pill over any part of either half, and the error banner's text (4.5:1) and
-                // glyph (3:1) over the devil's half, where the dock sits.
-                for variant in variants {
-                    for edge in [0.0, 1.0] {
-                        for position in stride(from: 0.0, through: 1.0, by: 0.05) {
-                            let behind = StageColors.sample(half, at: position)
-                            let pill = StageColors.composite(variant.captionGrade.tint(variant.pillTint, at: edge), over: behind)
-                            for (ink, kind) in [(variant.pillText, "final"), (variant.pillPendingText, "pending")] {
-                                let ratio = StageColors.contrast(ink, pill)
-                                check(ratio >= 4.5, "\(name) pill \(kind) text contrast \(ratio) over \(character) at \(position)")
-                            }
-                            guard character == .devil else { continue }
-                            let banner = StageColors.composite(variant.captionGrade.tint(variant.bannerTint, at: edge), over: behind)
-                            let text = StageColors.contrast(variant.bannerText, banner)
-                            check(text >= 4.5, "\(name) banner text contrast \(text) at \(position), edge \(edge)")
-                            let glyph = StageColors.contrast(variant.bannerGlyph, banner)
-                            check(glyph >= 3, "\(name) banner glyph contrast \(glyph) at \(position), edge \(edge)")
-                        }
+        let colors = StageColors.light
+        for character in DuoCharacter.allCases {
+            let half = character == .angel ? colors.angelHalf : colors.devilHalf
+            for position in sampled {
+                let ratio = StageColors.contrast(colors.ink[character], StageColors.sample(half, at: position))
+                check(ratio >= 4.5, "\(character) ink contrast \(ratio) < 4.5 at radial position \(position)")
+            }
+            let variants = [colors, colors.increasingContrast(), colors.reducingTransparency()]
+            // Typing dots against the character's bubble, at its grade's densest and
+            // thinnest edges, over any part of the half (solid under Reduce Transparency).
+            for variant in variants {
+                for edge in [0.0, 1.0] {
+                    let tint = variant.captionGrade.tint(variant.bubbleTint[character], at: edge)
+                    for position in stride(from: 0.0, through: 1.0, by: 0.05) {
+                        let bubble = StageColors.composite(tint, over: StageColors.sample(half, at: position))
+                        let ratio = StageColors.contrast(colors.dots[character], bubble)
+                        check(ratio >= 3, "\(character) dots contrast \(ratio) at \(position), edge \(edge)")
+                        // Caption text is body size, so it needs 4.5:1 on its bubble.
+                        let text = StageColors.contrast(colors.bubbleText[character], bubble)
+                        check(text >= 4.5, "\(character) caption contrast \(text) at \(position), edge \(edge)")
                     }
                 }
             }
-            // White on the microphone, in every state, from its middle down, where the glyph's
-            // body sits (a 3:1 icon; the lighter top edge is 2.5:1).
-            for fill in [colors.micFill, colors.micMutedFill, colors.micLoadingFill] {
-                for position in stride(from: 0.5, through: 1, by: 0.1) {
-                    let ratio = StageColors.contrast(RGBA(0xFFFFFF), StageColors.sample(fill, at: position))
-                    check(ratio >= 3, "\(name) microphone glyph contrast \(ratio) at \(position)")
+            // The chrome's glyphs (3:1, as icons) on its glass at either edge of its grade,
+            // over any part of its half: the header's buttons over the angel's, the dock and
+            // its side buttons over the devil's.
+            for chrome in variants {
+                for edge in [0.0, 1.0] {
+                    for position in stride(from: 0.0, through: 1.0, by: 0.05) {
+                        let tint = chrome.chromeGrade.tint(chrome.chromeGlass[character], at: edge)
+                        var glass = StageColors.composite(tint, over: StageColors.sample(half, at: position))
+                        if character == .devil {
+                            glass = StageColors.composite(chrome.chromeGrade.tint(chrome.dockButton, at: edge), over: glass)
+                        }
+                        let ratio = StageColors.contrast(chrome.chromeGlyph[character], glass)
+                        check(ratio >= 3, "\(character) chrome glyph contrast \(ratio) at \(position), edge \(edge)")
+                    }
                 }
+            }
+            // The human's words, final or still being recognized (body size, 4.5:1), on the
+            // pill over any part of either half, and the error banner's text (4.5:1) and
+            // glyph (3:1) over the devil's half, where the dock sits.
+            for variant in variants {
+                for edge in [0.0, 1.0] {
+                    for position in stride(from: 0.0, through: 1.0, by: 0.05) {
+                        let behind = StageColors.sample(half, at: position)
+                        let pill = StageColors.composite(variant.captionGrade.tint(variant.pillTint, at: edge), over: behind)
+                        for (ink, kind) in [(variant.pillText, "final"), (variant.pillPendingText, "pending")] {
+                            let ratio = StageColors.contrast(ink, pill)
+                            check(ratio >= 4.5, "pill \(kind) text contrast \(ratio) over \(character) at \(position)")
+                        }
+                        guard character == .devil else { continue }
+                        let banner = StageColors.composite(variant.captionGrade.tint(variant.bannerTint, at: edge), over: behind)
+                        let text = StageColors.contrast(variant.bannerText, banner)
+                        check(text >= 4.5, "banner text contrast \(text) at \(position), edge \(edge)")
+                        let glyph = StageColors.contrast(variant.bannerGlyph, banner)
+                        check(glyph >= 3, "banner glyph contrast \(glyph) at \(position), edge \(edge)")
+                    }
+                }
+            }
+        }
+        // White on the microphone, in every state, from its middle down, where the glyph's
+        // body sits (a 3:1 icon; the lighter top edge is 2.5:1).
+        for fill in [colors.micFill, colors.micMutedFill, colors.micLoadingFill] {
+            for position in stride(from: 0.5, through: 1, by: 0.1) {
+                let ratio = StageColors.contrast(RGBA(0xFFFFFF), StageColors.sample(fill, at: position))
+                check(ratio >= 3, "microphone glyph contrast \(ratio) at \(position)")
             }
         }
         // The microphone: teal-green, deepening toward the bottom.
@@ -682,46 +680,39 @@ enum StageRigChecks {
         check(mic == [RGBA(0x36C7A0), RGBA(0x19A383), RGBA(0x0B7A62)], "the teal microphone")
         check(mic[2].luminance < mic[0].luminance * 0.5, "the microphone darkens toward the bottom")
         // Reduce Transparency: every colour is opaque, and the glow sprite is gone.
-        for dark in [false, true] {
-            for increaseContrast in [false, true] {
-                let reduced = StageColors.resolve(dark: dark, reduceTransparency: true, increaseContrast: increaseContrast)
-                let all = Self.colors(in: reduced)
-                check(all.count >= 40, "Reflection found the palette's colours (\(all.count))")
-                for (path, color) in all {
-                    check(color.a == 1, "\(path) is translucent (\(color.a)) under Reduce Transparency")
-                }
-                check(reduced.haloGlow == nil && reduced.haloOutline != nil && reduced.contactLine != nil
-                          && reduced.opaque, "Reduce Transparency swaps the glow and the shadow")
-                check(reduced.bubbleShadow == nil && reduced.glassEdgeLight == nil && reduced.chromeGrade == .flat
-                          && reduced.captionGrade == .flat, "Reduce Transparency fills the glass evenly, unlit")
+        for increaseContrast in [false, true] {
+            let reduced = StageColors.resolve(reduceTransparency: true, increaseContrast: increaseContrast)
+            let all = Self.colors(in: reduced)
+            check(all.count >= 40, "Reflection found the palette's colours (\(all.count))")
+            for (path, color) in all {
+                check(color.a == 1, "\(path) is translucent (\(color.a)) under Reduce Transparency")
             }
+            check(reduced.haloGlow == nil && reduced.haloOutline != nil && reduced.contactLine != nil
+                      && reduced.opaque, "Reduce Transparency swaps the glow and the shadow")
+            check(reduced.bubbleShadow == nil && reduced.glassEdgeLight == nil && reduced.chromeGrade == .flat
+                      && reduced.captionGrade == .flat, "Reduce Transparency fills the glass evenly, unlit")
         }
 
-        // The seam's soft edge at rest: six feathering strokes a side in each scheme, the angel's
-        // warm glow stronger than the devil's faint shade.
-        for colors in [StageColors.light, StageColors.dusk] {
-            for c in DuoCharacter.allCases {
-                check(colors.seamGlow[c].count == 6 && colors.seamGlow[c].allSatisfy { $0.a > 0 && $0.a <= 0.1 },
-                      "\(c)'s side of the seam's soft edge")
-            }
-            check(colors.seamGlow.angel[0].a > colors.seamGlow.devil[0].a, "the glow outshines the shade")
+        // The seam's soft edge at rest: six feathering strokes a side, the angel's warm glow
+        // stronger than the devil's faint shade.
+        for c in DuoCharacter.allCases {
+            check(colors.seamGlow[c].count == 6 && colors.seamGlow[c].allSatisfy { $0.a > 0 && $0.a <= 0.1 },
+                  "\(c)'s side of the seam's soft edge")
         }
+        check(colors.seamGlow.angel[0].a > colors.seamGlow.devil[0].a, "the glow outshines the shade")
 
         // Spot values.
-        check(StageColors.light.ink.angel == RGBA(0x2A1206) && StageColors.dusk.ink.devil == RGBA(0x120502), "ink")
+        check(StageColors.light.ink.angel == RGBA(0x2A1206), "ink")
         check(StageColors.light.devilHalf.map(\.location) == [0, 0.15, 0.31, 0.48, 0.66, 0.85, 1], "devil half stops")
         // The halves' grading: lighter behind the faces than at the edges, the angel's gold
         // toward the seam and the devil's deep red toward the bottom.
         for half in [StageColors.light.angelHalf, StageColors.light.devilHalf] {
             check(half.last!.color.luminance < 0.75 * half.first!.color.luminance, "a half deepens toward its edges")
         }
-        check(StageColors.resolve(dark: false, reduceTransparency: true, increaseContrast: false).wingFill[0].color
-                  == RGBA(0xFFF7E1), "opaque light wing")
-        check(StageColors.resolve(dark: true, reduceTransparency: true, increaseContrast: false).wingFill[0].color
-                  == RGBA(0xE8DCB8), "opaque dark wing")
-        check(StageColors.resolve(dark: false, reduceTransparency: false, increaseContrast: false) == .light, "light")
-        check(StageColors.resolve(dark: true, reduceTransparency: false, increaseContrast: false) == .dusk, "dusk")
-        let contrast = StageColors.resolve(dark: true, reduceTransparency: false, increaseContrast: true)
+        check(StageColors.resolve(reduceTransparency: true, increaseContrast: false).wingFill[0].color
+                  == RGBA(0xFFF7E1), "opaque wing")
+        check(StageColors.resolve(reduceTransparency: false, increaseContrast: false) == .light, "light")
+        let contrast = StageColors.resolve(reduceTransparency: false, increaseContrast: true)
         near(contrast.inkStrokeScale, 1.2, 0, "Increase Contrast ink")
         near(contrast.seamLine!.a, 0.4, 0, "Increase Contrast seam line")
         check(contrast.bubbleTint.angel.a >= 0.9 && contrast.bubbleTint.devil.a >= 0.9 && contrast.pillTint.a >= 0.9
@@ -730,19 +721,15 @@ enum StageRigChecks {
               "Increase Contrast fills the glass evenly, outlined")
         // The glass grades gently: denser at the top, thinner toward the bottom, the captions'
         // less than the chrome's.
-        for colors in [StageColors.light, StageColors.dusk] {
-            check(colors.chromeGrade.top > 1 && colors.chromeGrade.bottom < 1, "the chrome's glass grades")
-            check(colors.captionGrade.top > 1 && colors.captionGrade.bottom < 1
-                      && colors.captionGrade.top - colors.captionGrade.bottom
-                      < colors.chromeGrade.top - colors.chromeGrade.bottom, "the captions' glass grades gently")
-        }
-        near(StageColors.dusk.contactShadowAlphaScale, 1.4, 0, "dusk shadow alpha")
-        // Rims: stroke alphas live in the palette; dusk's are its strongest stroke's.
+        check(colors.chromeGrade.top > 1 && colors.chromeGrade.bottom < 1, "the chrome's glass grades")
+        check(colors.captionGrade.top > 1 && colors.captionGrade.bottom < 1
+                  && colors.captionGrade.top - colors.captionGrade.bottom
+                  < colors.chromeGrade.top - colors.chromeGrade.bottom, "the captions' glass grades gently")
+        // Rims: stroke alphas live in the palette.
         check(StageColors.light.rim.angel == [RGBA(0xFDC54F, alpha: 0.35), RGBA(0xFDC54F, alpha: 0.5)]
-                  && StageColors.light.rim.devil == [RGBA(0xFF9A3C, alpha: 0.5)], "light rims")
-        check(StageColors.dusk.rim.angel.map(\.a).max() == 0.6 && StageColors.dusk.rim.devil.map(\.a) == [0.5], "dusk rims")
+                  && StageColors.light.rim.devil == [RGBA(0xFF9A3C, alpha: 0.5)], "rims")
         // Under Reduce Transparency each opaque band equals the translucent stack over the half.
-        let opaqueRim = StageColors.resolve(dark: false, reduceTransparency: true, increaseContrast: false).rim.angel
+        let opaqueRim = StageColors.resolve(reduceTransparency: true, increaseContrast: false).rim.angel
         let seamAngel = StageColors.sample(StageColors.light.angelHalf, at: 0.55)
         let outerBand = StageColors.composite(StageColors.light.rim.angel[0], over: seamAngel)
         let innerBand = StageColors.composite(StageColors.light.rim.angel[1], over: outerBand)

@@ -5,13 +5,10 @@ struct PipecatVoiceApp: App {
     @State private var model = ConversationModel()
     @State private var launchRequests = ConversationLaunchRequests.shared
     @Environment(\.scenePhase) private var scenePhase
-    /// Light unless dark mode is on in Settings.
-    @AppStorage("darkMode") private var darkMode = false
 
     var body: some Scene {
         WindowGroup {
             root
-                .preferredColorScheme(darkMode ? .dark : .light)
                 .onChange(of: scenePhase, initial: true) { previous, phase in
                     if phase == .background, previous != phase { model.enterBackground() }
                     if phase == .active {

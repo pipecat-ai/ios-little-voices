@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// The stage's colours for an environment: `StageColors` resolved from the colour scheme,
-/// Increase Contrast and Reduce Transparency, as SwiftUI colours and gradients.
+/// The stage's colours for an environment: `StageColors` resolved from Increase Contrast and
+/// Reduce Transparency, as SwiftUI colours and gradients.
 struct StagePalette: Equatable, Sendable {
     let colors: StageColors
 
-    init(colorScheme: ColorScheme, contrast: ColorSchemeContrast, reduceTransparency: Bool) {
-        colors = StageColors.resolve(dark: colorScheme == .dark, reduceTransparency: reduceTransparency,
-                                     increaseContrast: contrast == .increased)
+    init(contrast: ColorSchemeContrast, reduceTransparency: Bool) {
+        colors = StageColors.resolve(reduceTransparency: reduceTransparency, increaseContrast: contrast == .increased)
     }
 
     func color(_ c: RGBA) -> Color { Color(.sRGB, red: c.r, green: c.g, blue: c.b, opacity: c.a) }

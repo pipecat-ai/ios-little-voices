@@ -6,7 +6,6 @@ struct ConversationView: View {
     @Bindable var model: ConversationModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
     /// Where the header ends and the footer starts, in window coordinates; the stage keeps its
@@ -86,7 +85,7 @@ struct ConversationView: View {
 
     /// The stage's palette, which the chrome shares.
     private var palette: StagePalette {
-        StagePalette(colorScheme: colorScheme, contrast: contrast, reduceTransparency: reduceTransparency)
+        StagePalette(contrast: contrast, reduceTransparency: reduceTransparency)
     }
 
     /// Whether the dock shows its conversation controls: in a conversation, or inert under a
@@ -251,7 +250,6 @@ private struct SettingsView: View {
     @State private var showContactPicker = false
     @State private var contactNotice: String?
     @State private var error: String?
-    @AppStorage("darkMode") private var darkMode = false
 
     init(model: ConversationModel) {
         self.model = model
@@ -284,9 +282,6 @@ private struct SettingsView: View {
                     LabeledContent("Language", value: "English (US)")
                 } header: { Text("Voices") } footer: {
                     Text("Gradium Phonon generates speech audio on this device.")
-                }
-                Section("Appearance") {
-                    Toggle("Dark mode", isOn: $darkMode)
                 }
                 Section {
                     NavigationLink("Set up a voice shortcut") { WakeShortcutSetupView() }

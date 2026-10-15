@@ -13,9 +13,9 @@ runs on the iPhone, with no server and no API keys:
 - **Gradium Phonon** speaks each character in their own voice, and lip sync shapes the words.
 
 The interface is one squishy stage: whoever speaks swells into the other's half, their words
-appear a sentence at a time, and a character writing their next line shows typing dots. Light
-and dark appearance, Dynamic Type, VoiceOver, Reduce Transparency and Reduce Motion are
-supported. The characters speak and understand English.
+appear a sentence at a time, and a character writing their next line shows typing dots. It is
+always light, and Dynamic Type, VoiceOver, Reduce Transparency and Reduce Motion are supported.
+The characters speak and understand English.
 
 ## Requirements
 
@@ -71,8 +71,8 @@ patch, `uv run --no-sync python scripts/setup.py --pipecat-only`.
 **PipecatVoice** target, and run. Tap the microphone and ask a question; pause to finish your
 turn. Speak at any time to cut in. Tap the microphone again to mute, End to finish, and New
 conversation to start afresh. In Settings, give your name (or pick your contact) so the
-characters can greet you, switch the stage to dark mode, and set up "Hey Little Voices" with
-Apple's Vocal Shortcuts. The button beside the microphone opens Apple's microphone picker.
+characters can greet you, and set up "Hey Little Voices" with Apple's Vocal Shortcuts. The
+button beside the microphone opens Apple's microphone picker.
 
 **In the Simulator.** Apple's on-device speech recognition doesn't run there, so you can't
 talk to the characters. The scripted conversations run the rest of the app instead:
