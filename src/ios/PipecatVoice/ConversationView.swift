@@ -60,7 +60,10 @@ struct ConversationView: View {
         .sensoryFeedback(.selection, trigger: model.muted) { _, _ in model.active }
         // New conversation's wipe taps in place of the conversation's end.
         .sensoryFeedback(.impact(flexibility: .soft), trigger: resetWipe?.id) { _, wipe in wipe != nil }
-        .sensoryFeedback(.impact(weight: .light), trigger: model.active) { _, _ in resetWipe == nil }
+        // A conversation started by holding the microphone gets its tap as it starts listening.
+        .sensoryFeedback(.impact(weight: .light), trigger: model.active) { _, active in
+            resetWipe == nil && !(active && model.holdsToTalk)
+        }
         .onChange(of: model.error) {
             if let error = model.errorMessage { AccessibilityNotification.Announcement("Error: \(error)").post() }
         }
@@ -81,6 +84,7 @@ struct ConversationView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilitySortPriority(1)
+        .onChange(of: introPlaying) { _, playing in if !playing { model.introEnded() } }
     }
 
     /// The stage's palette, which the chrome shares.
@@ -191,11 +195,26 @@ struct ConversationView: View {
         let connecting: Bool
         let palette: StagePalette
 
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
         var body: some View {
             MicrophoneControl(level: model.userLevel, muted: model.muted, connecting: connecting,
-                              active: model.active, palette: palette) {
-                if model.active { model.toggleMute() } else { model.start() }
+                              active: model.active, holds: model.microphoneHolds, held: model.talking,
+                              hearing: model.hearing, palette: palette) {
+                if model.active { model.toggleMute() } else { model.start(holdingToTalk: false) }
+            } onHold: { pressed in
+                if pressed { model.pressMicrophone() } else { model.releaseMicrophone() }
             }
+            .overlay(alignment: .top) {
+                if model.showsHoldHint {
+                    HoldToTalkHint(palette: palette)
+                        .fixedSize()
+                        .offset(y: -54)
+                        .transition(reduceMotion ? .opacity
+                            : .opacity.combined(with: .scale(scale: 0.85, anchor: .bottom)))
+                }
+            }
+            .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.25), value: model.showsHoldHint)
         }
     }
 
@@ -247,6 +266,7 @@ private struct SettingsView: View {
     let model: ConversationModel
     @Environment(\.dismiss) private var dismiss
     @State private var preferredName: String
+    @State private var inputMode: InputMode
     @State private var showContactPicker = false
     @State private var contactNotice: String?
     @State private var error: String?
@@ -254,6 +274,7 @@ private struct SettingsView: View {
     init(model: ConversationModel) {
         self.model = model
         _preferredName = State(initialValue: model.userProfile.preferredName)
+        _inputMode = State(initialValue: model.inputMode)
     }
 
     var body: some View {
@@ -273,6 +294,18 @@ private struct SettingsView: View {
                     if let contactNotice { Text(contactNotice).foregroundStyle(.secondary) }
                 } header: { Text("About you") } footer: {
                     Text("Choose your contact or enter the name you’d like the angel and the devil to use. Only this name is saved and added to their instructions when a conversation starts.")
+                }
+                .disabled(model.active)
+                Section {
+                    Picker("Microphone", selection: $inputMode) {
+                        ForEach(InputMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } header: { Text("Talking") } footer: {
+                    Text(inputMode == .hold
+                         ? "Hold the microphone while you talk, and let go when you’re done."
+                         : "Tap the microphone once, then talk. The angel and the devil answer when you pause.")
                 }
                 .disabled(model.active)
                 Section {
@@ -297,7 +330,7 @@ private struct SettingsView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: { Text("On this device") } footer: {
-                    Text("Conversations stay in memory and clear when the app closes. Apple Intelligence must be enabled. Apple speech assets may download on first use.")
+                    Text("Conversations stay in memory and are forgotten when they end. Apple Intelligence must be enabled. Apple speech assets may download on first use.")
                 }
                 Section("Credits") {
                     credit("Pipecat", detail: "Conversation by Pipecat, Daily’s open-source framework for voice AI.",
@@ -314,7 +347,7 @@ private struct SettingsView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
                             do {
-                                try model.saveProfile(preferredName: preferredName)
+                                try model.saveSettings(preferredName: preferredName, inputMode: inputMode)
                                 dismiss()
                             } catch { self.error = error.localizedDescription }
                         }.disabled(model.active)

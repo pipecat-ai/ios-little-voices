@@ -159,7 +159,7 @@ def main():
         "OTHER_SWIFT_FLAGS": ["$(inherited)", "-Xcc", "-DACCELERATE_NEW_LAPACK"],
     }
     target_settings = {
-        "PRODUCT_BUNDLE_IDENTIFIER": "ai.pipecat.voice",
+        "PRODUCT_BUNDLE_IDENTIFIER": "ai.pipecat.littlevoices",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "TARGETED_DEVICE_FAMILY": "1,2",
@@ -188,7 +188,7 @@ def main():
             "SoundAnalysis",
         ],
         "CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "NO",
-        "MARKETING_VERSION": "0.1.0",
+        "MARKETING_VERSION": "1.0",
         "CURRENT_PROJECT_VERSION": "1",
     }
     if signing_team:
@@ -308,6 +308,9 @@ def main():
         ],
         # Always light, so Settings and system UI match the stage's palette.
         "UIUserInterfaceStyle": "Light",
+        # No encryption beyond hashing (Python's hashlib modules) and the system's own, so
+        # uploads need no export compliance documents.
+        "ITSAppUsesNonExemptEncryption": False,
     }
     (ROOT / "src/ios/PipecatVoice/Info.plist").write_bytes(plistlib.dumps(info))
     print("Generated PipecatVoice.xcodeproj")

@@ -268,7 +268,7 @@ def main():
             (framework / f"{name}.origin").write_text(str(marker.relative_to(bundle)) + "\n")
             info = {
                 "CFBundleExecutable": name,
-                "CFBundleIdentifier": f"ai.pipecat.python.{name.replace('_', '-')}",
+                "CFBundleIdentifier": f"ai.pipecat.littlevoices.python.{name.replace('_', '-')}",
                 "CFBundleName": name,
                 "CFBundlePackageType": "FMWK",
                 "CFBundleShortVersionString": "1.0",

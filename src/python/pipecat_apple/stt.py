@@ -49,7 +49,11 @@ def _validate_native_settings(settings: STTSettings) -> None:
 
 
 class AppleSpeechSTTService(STTService):
-    """Confirm native VAD activity with Apple ASR before starting a user turn."""
+    """Confirm native VAD activity with Apple ASR before starting a user turn.
+
+    A host whose microphone is held to talk sends ``talk`` events instead of VAD
+    scores: pressing begins a speech span and releasing ends it, finalizing ASR.
+    """
 
     def __init__(
         self, bridge: AppleNativeBridge, *, vad_analyzer: AppleVADAnalyzer, **kwargs: Any
@@ -266,7 +270,7 @@ class AppleSpeechSTTService(STTService):
         if event.get("session") is not None and event["session"] != self.bridge.session:
             return
         kind = event.get("type")
-        if kind in {"vad", "transcription", "endpoint"} and (
+        if kind in {"vad", "talk", "transcription", "endpoint"} and (
             frame.metadata.get("input_epoch") != self.bridge.input_epoch
         ):
             # Mute/resume restarts ASR and VAD inside the same native session.
@@ -281,6 +285,13 @@ class AppleSpeechSTTService(STTService):
             if state == VADState.SPEAKING:
                 await self._begin_speech()
             elif state == VADState.QUIET and self._speech_active:
+                await self._end_speech()
+        elif kind == "talk":
+            if not self.bridge.active or self.bridge.muted:
+                return
+            if event.get("talking"):
+                await self._begin_speech()
+            elif self._speech_active:
                 await self._end_speech()
         elif kind == "transcription":
             if self.bridge.active and not self.bridge.muted:

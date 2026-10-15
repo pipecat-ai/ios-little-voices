@@ -115,62 +115,119 @@ struct GlassCircleButton: View {
     }
 }
 
-/// The dock's microphone: teal, or red while muted, with `MicrophonePulse`'s rings while the
-/// human speaks.
+/// The dock's microphone: gray with a spinner while the app loads or a conversation starts,
+/// then teal, or red while muted, with `MicrophonePulse`'s rings while the human speaks. Holding
+/// to talk, it listens while it is held, swelling under the finger, and `onHold` hears each press
+/// and release (VoiceOver activates it once to talk and again to finish); otherwise a tap starts
+/// a conversation, then mutes and unmutes it.
 struct MicrophoneControl: View {
     let level: Double
     let muted: Bool
     let connecting: Bool
     let active: Bool
+    /// Hold to talk.
+    let holds: Bool
+    /// Holding to talk: the human holds it, and is heard.
+    let held: Bool
+    let hearing: Bool
     let palette: StagePalette
     let action: () -> Void
+    let onHold: (Bool) -> Void
+    @GestureState private var pressed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let diameter: CGFloat = 76
     private var fill: [GradientStop] {
         connecting ? palette.colors.micLoadingFill : muted ? palette.colors.micMutedFill : palette.colors.micFill
     }
-    private var listening: Bool { active && !muted && !connecting }
+    private var listening: Bool { holds ? hearing : active && !muted && !connecting }
     private var title: String {
-        connecting ? "Connecting" : !active ? "Start conversation" : muted ? "Unmute microphone" : "Mute microphone"
+        if holds { return held ? "Listening" : "Hold to talk" }
+        return connecting ? "Connecting" : !active ? "Start conversation" : muted ? "Unmute microphone" : "Mute microphone"
+    }
+    private var value: String {
+        if holds { return connecting && held ? "Please wait" : held ? "Microphone on" : "Ready" }
+        return connecting ? "Please wait" : !active ? "Ready" : muted ? "Muted" : "Microphone on"
+    }
+    private var hint: String {
+        if holds { return held ? "Sends what you said." : "Listens until you activate it again." }
+        return connecting ? "" : !active ? "Starts a conversation with the angel and the devil."
+            : muted ? "Turns your microphone back on." : "Pauses your microphone."
     }
 
     var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle().fill(LinearGradient(gradient: palette.gradient(fill), startPoint: .top, endPoint: .bottom))
-                // A sheen across the top in place of a rim.
-                if !palette.colors.opaque {
-                    Circle().fill(RadialGradient(colors: [.white.opacity(0.3), .white.opacity(0)],
-                                                 center: UnitPoint(x: 0.5, y: 0.06), startRadius: 0,
-                                                 endRadius: Self.diameter * 0.58))
-                }
-                if palette.colors.bubbleStrokeAlpha > 0 {
-                    Circle().strokeBorder(Color.primary.opacity(palette.colors.bubbleStrokeAlpha), lineWidth: 1)
-                }
-                if connecting {
-                    ProgressView().tint(.white).controlSize(.regular).scaleEffect(1.15)
-                } else {
-                    Image(systemName: muted ? "mic.slash.fill" : "mic.fill")
-                        .font(.system(size: Self.diameter * 0.38, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .contentTransition(.symbolEffect(.replace))
-                }
-            }.frame(width: Self.diameter, height: Self.diameter)
-                .shadow(color: palette.color(fill.last?.color ?? RGBA(0x0B7A62)).opacity(palette.colors.opaque ? 0 : 0.18),
-                        radius: 10, y: 4)
-                .background { MicrophonePulse(listening: listening, level: level, palette: palette) }
-                .contentShape(Circle())
+        control
+            .accessibilityLabel(title)
+            .accessibilityValue(value)
+            .accessibilityHint(hint)
+            .accessibilityShowsLargeContentViewer { Label(title, systemImage: muted ? "mic.slash.fill" : "mic.fill") }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: muted)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: connecting)
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        if holds {
+            face
+                .scaleEffect(reduceMotion ? 1 : pressed || held ? 1.12 : 1)
+                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.55), value: pressed || held)
+                // A cancelled touch, as when an alert takes over, releases it too.
+                .gesture(DragGesture(minimumDistance: 0).updating($pressed) { _, pressed, _ in pressed = true })
+                .onChange(of: pressed) { _, pressed in onHold(pressed) }
+                .sensoryFeedback(.impact(weight: .medium), trigger: hearing) { _, hearing in hearing }
+                .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: held) { was, held in was && !held }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { onHold(!held) }
+        } else {
+            Button(action: action) { face }
+                .buttonStyle(VoicePressStyle())
+                .disabled(connecting)
         }
-        .buttonStyle(VoicePressStyle())
-        .disabled(connecting)
-        .accessibilityLabel(title)
-        .accessibilityValue(connecting ? "Please wait" : !active ? "Ready" : muted ? "Muted" : "Microphone on")
-        .accessibilityHint(connecting ? "" : !active ? "Starts a conversation with the angel and the devil."
-            : muted ? "Turns your microphone back on." : "Pauses your microphone.")
-        .accessibilityShowsLargeContentViewer { Label(title, systemImage: muted ? "mic.slash.fill" : "mic.fill") }
-        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: muted)
-        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: connecting)
+    }
+
+    private var face: some View {
+        ZStack {
+            Circle().fill(LinearGradient(gradient: palette.gradient(fill), startPoint: .top, endPoint: .bottom))
+            // A sheen across the top in place of a rim.
+            if !palette.colors.opaque {
+                Circle().fill(RadialGradient(colors: [.white.opacity(0.3), .white.opacity(0)],
+                                             center: UnitPoint(x: 0.5, y: 0.06), startRadius: 0,
+                                             endRadius: Self.diameter * 0.58))
+            }
+            if palette.colors.bubbleStrokeAlpha > 0 {
+                Circle().strokeBorder(Color.primary.opacity(palette.colors.bubbleStrokeAlpha), lineWidth: 1)
+            }
+            if connecting {
+                ProgressView().tint(.white).controlSize(.regular).scaleEffect(1.15)
+            } else {
+                Image(systemName: muted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: Self.diameter * 0.38, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+        }.frame(width: Self.diameter, height: Self.diameter)
+            .shadow(color: palette.color(fill.last?.color ?? RGBA(0x0B7A62)).opacity(palette.colors.opaque ? 0 : 0.18),
+                    radius: 10, y: 4)
+            .background { MicrophonePulse(listening: listening, level: level, palette: palette) }
+            .contentShape(Circle())
+    }
+}
+
+/// "Hold to talk", above the microphone for a moment after it is tapped rather than held.
+struct HoldToTalkHint: View {
+    let palette: StagePalette
+
+    var body: some View {
+        let colors = palette.colors
+        Text("Hold to talk")
+            .font(.subheadline.weight(.semibold)).fontDesign(.rounded)
+            .foregroundStyle(palette.color(colors.bannerText))
+            .padding(.horizontal, 16).padding(.vertical, 9)
+            .softGlass(Capsule(), tint: colors.bannerTint, kind: .caption, palette: palette)
+            .fixedSize()
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -259,8 +316,8 @@ struct ThinkingDots: View {
 }
 
 /// The logo over the launch intro (`StageIntro.logo`): it drops in from above with a bounce,
-/// holds in the middle of the screen, then slides back up and fades. Under Reduce Motion it fades
-/// in and out where it rests.
+/// holds in the middle of the screen, then slides back up and fades. Reduce Motion skips the
+/// intro and its logo; turned on while the logo is up, it fades the logo where it rests.
 struct IntroLogo: View {
     let shown: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

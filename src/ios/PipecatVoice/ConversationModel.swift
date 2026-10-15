@@ -60,11 +60,16 @@ protocol SpeechInput: AnyObject {
     var onVAD: ((Double, Double, Double) -> Void)? { get set }
     var onLevel: ((Double) -> Void)? { get set }
     var onError: ((String) -> Void)? { get set }
+    /// Hold to talk: recognize only while the microphone is held. Set before `start`.
+    var holdsToTalk: Bool { get set }
     /// Load the recognizer's model ahead of `start`, without the microphone.
     func prepare() async
     /// Start listening on a fresh clock.
     func start() async throws
     func stop() async
+    /// Hold to talk: start recognizing as the microphone is pressed, from a moment before unless
+    /// `preRoll` is false, or finalize the speech and stop as it is released.
+    func listen(_ on: Bool, preRoll: Bool) async throws
     /// Deliver every final result for the speech so far, then return.
     func finalize() async throws
     func logAudioMetrics(stage: String)
@@ -94,6 +99,17 @@ final class ConversationModel {
     private(set) var ready = false
     private(set) var active = false
     private(set) var muted = false
+    /// How conversations take the human's turns, from Settings.
+    private(set) var inputMode = InputMode.load()
+    /// This conversation listens only while the microphone is held.
+    private(set) var holdsToTalk = false
+    /// The human holds the microphone in a hold-to-talk conversation.
+    private(set) var talking = false
+    /// A push to talk is being heard: from the press, once the microphone is ready, until a
+    /// moment after the release.
+    private(set) var hearing = false
+    /// The microphone was tapped rather than held, so it shows how to talk.
+    private(set) var showsHoldHint = false
     /// Setting up audio, speech and models: as a conversation starts, and after an audio route change.
     private(set) var preparing = false
     /// Loading the voices, Audience and speech recognition as the app opens or returns.
@@ -162,7 +178,7 @@ final class ConversationModel {
     private let audience = AudienceRunner()
     private let languageModel: TextGenerator
     private let modelWork = NativeModelWorkCoordinator()
-    private let logger = Logger(subsystem: "ai.pipecat.voice", category: "Conversation")
+    private let logger = Logger(subsystem: "ai.pipecat.littlevoices", category: "Conversation")
     private var languageModelRequest: String?
     private var requests: [String: Task<Void, Never>] = [:]
     private var speechRequest: String?
@@ -173,11 +189,18 @@ final class ConversationModel {
     private var playing = false
     private var sessionTask: Task<Void, Never>?
     private var captureTask: Task<Void, Never>?
+    private var pressedAt: ContinuousClock.Instant?
+    private var releaseTask: Task<Void, Never>?
+    private var hintTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
     /// The voices, Audience and speech recognition loading, or loaded, for conversations to come.
     private var warmup: Task<Void, Error>?
     /// Freeing the voices and Audience in the background; the next load waits for it.
     private var cooldown: Task<Void, Never>?
+    /// The launch intro still plays: the models wait for it, so loading them doesn't take its frames.
+    private var awaitingIntro = true
+    /// Between `becomeActive` and `enterBackground`.
+    private var inFront = false
     private var sessionGeneration = UUID()
     private var captureGeneration = UUID()
     private var inputReady = false
@@ -226,11 +249,11 @@ final class ConversationModel {
             sendSession(["type": "transcription", "text": text, "final": final, "start": start, "end": end])
         }
         speech.onVAD = { [weak self] confidence, time, volume in
-            guard let self, active, !muted, inputReady else { return }
+            guard let self, active, !muted, inputReady, !holdsToTalk else { return }
             sendSession(["type": "vad", "confidence": confidence, "time": time, "volume": volume])
         }
         speech.onLevel = { [weak self] value in
-            guard let self, active, !muted, inputReady else { return }
+            guard let self, active, !muted, inputReady, !holdsToTalk || hearing else { return }
             userLevel = value
         }
         speech.onError = { [weak self] message in self?.fail(message) }
@@ -284,13 +307,18 @@ final class ConversationModel {
             }
     }
 
-    func saveProfile(preferredName: String) throws {
+    func saveSettings(preferredName: String, inputMode: InputMode) throws {
         guard !active else { throw VoiceError(message: "End the conversation before changing settings.") }
         let profile = UserProfile(preferredName: preferredName)
         try ProfileSettings.save(profile)
+        if profile != userProfile { invalidatePreparation() }
         userProfile = profile
-        invalidatePreparation()
+        InputMode.save(inputMode)
+        self.inputMode = inputMode
     }
+
+    /// Whether the microphone is held to talk: in this conversation, or in the next one.
+    var microphoneHolds: Bool { active ? holdsToTalk : inputMode == .hold }
 
     private func send(_ event: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: event),
@@ -305,9 +333,22 @@ final class ConversationModel {
     // MARK: - The session
 
     /// The app is in front: check the language model again, and load the voices, Audience and
-    /// speech recognition, so the microphone needn't wait for them.
+    /// speech recognition once the launch intro has played, so the microphone needn't wait for
+    /// them.
     func becomeActive() {
+        inFront = true
         refreshAvailability()
+        if !awaitingIntro { warmUp() }
+    }
+
+    /// The launch intro has played, or a conversation took it over.
+    func introEnded() {
+        guard awaitingIntro else { return }
+        awaitingIntro = false
+        if inFront { warmUp() }
+    }
+
+    private func warmUp() {
         #if DEBUG
         if checking { return }
         #endif
@@ -317,12 +358,16 @@ final class ConversationModel {
     /// The app has gone to the background: the conversation ends, and the voices and Audience are
     /// freed until it returns.
     func enterBackground() {
+        inFront = false
         stop()
-        guard let warmup else { return }
+        #if DEBUG
+        if checking { return }
+        #endif
+        let warmup = self.warmup
         self.warmup = nil
         warming = false
         cooldown = Task {
-            _ = await warmup.result
+            _ = await warmup?.result
             await synthesizer.unload()
             await audience.unload()
         }
@@ -366,7 +411,9 @@ final class ConversationModel {
         return task
     }
 
-    func start() {
+    /// Start a conversation that listens throughout, or, `holdingToTalk`, only while the
+    /// microphone is held.
+    func start(holdingToTalk: Bool) {
         guard ready, !active else { return }
         error = nil
         refreshAvailability()
@@ -375,6 +422,8 @@ final class ConversationModel {
         invalidatePreparation()
         active = true
         muted = false
+        holdsToTalk = holdingToTalk
+        speech.holdsToTalk = holdingToTalk
         userLevel = 0
         inputReady = false
         preparing = true
@@ -401,23 +450,116 @@ final class ConversationModel {
                 inputReady = true
                 configuredAudioRoute = audioRouteSignature
                 preparing = false
+                // The microphone pressed to start the conversation is still held.
+                if talking { beginTalking() }
             } catch is CancellationError { }
             catch { if sessionGeneration == generation { fail(error.localizedDescription) } }
         }
     }
 
-    /// App Intents enter through the same permission and audio setup as the microphone button.
+    /// App Intents enter through the same permission and audio setup as the microphone button. A
+    /// conversation started by voice is hands-free.
     func startFromShortcut() {
         showSettings = false
         if active {
             if muted, !preparing { toggleMute() }
             return
         }
-        start()
+        start(holdingToTalk: false)
+    }
+
+    // MARK: - Hold to talk
+
+    /// Held for less than this, the microphone was tapped.
+    private static let shortestHold: Duration = .milliseconds(300)
+    /// Listening goes on this long after the release, for a last word still being said.
+    private static let releaseTail: Duration = .milliseconds(350)
+
+    /// The microphone is pressed: in a hold-to-talk conversation, or to start one, the human
+    /// talks until it is released. Pressing cuts the characters off.
+    func pressMicrophone() {
+        if !active {
+            guard inputMode == .hold else { return }
+            start(holdingToTalk: true)
+            guard active else { return }
+        }
+        guard holdsToTalk, !talking else { return }
+        talking = true
+        pressedAt = .now
+        hintTask?.cancel()
+        showsHoldHint = false
+        if hearing {
+            // Pressed again within the release's tail: the same words go on.
+            releaseTask?.cancel()
+            releaseTask = nil
+        } else if inputReady, !isRecoveringAudio {
+            beginTalking()
+        }
+    }
+
+    /// The microphone is let go: a moment later the human's turn ends, or, if it was only
+    /// tapped, it shows how to talk.
+    func releaseMicrophone() {
+        guard talking else { return }
+        talking = false
+        if let pressedAt, pressedAt.duration(to: .now) < Self.shortestHold { showHoldHint() }
+        pressedAt = nil
+        guard hearing else { return }
+        let generation = sessionGeneration
+        releaseTask = Task {
+            try? await Task.sleep(for: Self.releaseTail)
+            guard !Task.isCancelled, active, sessionGeneration == generation, hearing, !talking else { return }
+            endTalking()
+        }
+    }
+
+    private func beginTalking() {
+        // A press while the characters speak or write cuts them off, without the pre-roll that
+        // would carry their voice.
+        let audible = playing || floor != nil
+        if audible || !writing.isEmpty { interruptReply() }
+        hearing = true
+        sendSession(["type": "talk", "talking": true])
+        listen(true, preRoll: !audible)
+    }
+
+    private func endTalking() {
+        releaseTask = nil
+        hearing = false
+        userLevel = 0
+        sendSession(["type": "talk", "talking": false])
+        listen(false, preRoll: false)
+    }
+
+    private func listen(_ on: Bool, preRoll: Bool) {
+        let generation = captureGeneration
+        Task {
+            do { try await speech.listen(on, preRoll: preRoll) }
+            catch is CancellationError { }
+            catch { if active, captureGeneration == generation { fail(error.localizedDescription) } }
+        }
+    }
+
+    /// Forget the push to talk in progress, if any.
+    private func releaseHold() {
+        talking = false
+        hearing = false
+        pressedAt = nil
+        releaseTask?.cancel()
+        releaseTask = nil
+    }
+
+    private func showHoldHint() {
+        showsHoldHint = true
+        hintTask?.cancel()
+        hintTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { showsHoldHint = false }
+        }
     }
 
     func toggleMute() {
-        guard active, !preparing else { return }
+        guard active, !preparing, !holdsToTalk else { return }
         muted.toggle()
         userLevel = 0
         userTranscript.partial = ""
@@ -458,6 +600,7 @@ final class ConversationModel {
         if ready { sendSession(["type": "stop"]) }
         active = false
         muted = false
+        releaseHold()
         inputReady = false
         preparing = false
         microphonePickerPresented = false
@@ -531,6 +674,7 @@ final class ConversationModel {
         // Keep the Pipecat conversation, but cancel the current utterance/reply
         // before rebuilding converters for the selected microphone's format.
         interruptReply()
+        releaseHold()
         inputReady = false
         isRecoveringAudio = true
         routeRestarting = false
@@ -581,6 +725,8 @@ final class ConversationModel {
                 isRecoveringAudio = false
                 routeRestarting = false
                 preparing = false
+                // The microphone was pressed while the route changed.
+                if talking { beginTalking() }
             } catch is CancellationError { }
             catch { if sessionGeneration == generation { fail(error.localizedDescription) } }
         }

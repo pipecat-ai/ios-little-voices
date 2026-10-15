@@ -9,7 +9,7 @@ final class AppleLanguageModel {
         let history: [HistoryMessage]
     }
 
-    private let logger = Logger(subsystem: "ai.pipecat.voice", category: "FoundationModels")
+    private let logger = Logger(subsystem: "ai.pipecat.littlevoices", category: "FoundationModels")
     private var cache = PreparedLanguageModelCache<PreparedSession>()
     private var generating = false
 
@@ -129,7 +129,7 @@ final class AppleLanguageModel {
                 guard snapshot.content.hasPrefix(previous) else {
                     throw NativeGenerationError(code: "LLM_STREAM",
                         message: "Apple's language model changed a response that was already being spoken. Please try again.",
-                        underlyingDomain: "ai.pipecat.voice", underlyingCode: 1)
+                        underlyingDomain: "ai.pipecat.littlevoices", underlyingCode: 1)
                 }
                 let delta = String(snapshot.content.dropFirst(previous.count))
                 if previous.isEmpty, !delta.isEmpty {

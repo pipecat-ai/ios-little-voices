@@ -10,3 +10,6 @@ App builds bundle these two with the checkpoint (`scripts/bundle_runtime.py`), a
 scripts speak in them as well as in Gradium's voices. To give a character another voice, add it
 here and name it in `DuoCharacter.voice` (Swift), `CAST` (`src/python/mobile_app/duo.py`) and
 `PHONON_VOICES` (`scripts/phonon_package.py`).
+
+Like the checkpoint, the voices are used under Gradium's terms, not this repository's BSD
+licence (see [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)).

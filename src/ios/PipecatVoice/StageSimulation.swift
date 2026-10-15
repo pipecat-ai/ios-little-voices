@@ -901,7 +901,7 @@ struct StageSimulation: Sendable {
     /// A conversation starts during the intro: no more beats, a shover's floor is let go, and
     /// anyone not yet there pops in (under Reduce Motion, the snap's cross-fade shows them).
     private mutating func handOverIntro(at t: Double) {
-        guard var intro else { return }
+        guard var intro, !intro.handedOver else { return }
         introduced = true
         guard !mode.reduceMotion else {
             self.intro = nil
@@ -1424,8 +1424,7 @@ struct StageSimulation: Sendable {
     }
 
     /// The earliest sim time something is scheduled: agenda items, role changes, the floor
-    /// debounce, the release hold, a pending slot, a pending pause, the intro's next beat and the
-    /// end of ambient breath.
+    /// debounce, the release hold, a pending slot, a pending pause and the end of ambient breath.
     var nextWake: Double? { wake(after: stepper.time - 1e-9, agenda: true) }
 
     /// The earliest scheduled time after `after`; agenda items (blinks, doze peeks) only when
@@ -1449,7 +1448,6 @@ struct StageSimulation: Sendable {
             consider(hold.since + 1.0)
         }
         consider(releaseAt)
-        consider(intro?.nextBeat)
         if stageFloor != nil, !paused, let since = quietSince { consider(since + Self.pauseAfter) }
         consider(crossFade.map { $0.start + Self.crossFadeDuration })
         if inputs.active { consider(lastInputChange + Self.ambientTimeout) }

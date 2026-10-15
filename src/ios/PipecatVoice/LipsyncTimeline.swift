@@ -399,7 +399,7 @@ final class LipsyncAnalysis: @unchecked Sendable {
     /// How far the text track runs past the analyzed audio, on the alignment's prediction.
     static let predictedHops = 2
 
-    private let queue = DispatchQueue(label: "ai.pipecat.voice.lipsync", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "ai.pipecat.littlevoices.lipsync", qos: .userInitiated)
     // Touched only on `queue`. A dead band of 0 makes every hop that moves a keyframe, so the
     // timeline has each hop's energy.
     private let analyzer = FormantLipsyncAnalyzer(deadBand: 0)

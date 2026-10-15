@@ -73,7 +73,8 @@ final class ConversationScript {
         try? await Task.sleep(until: launched + .seconds(StageIntro.length + 0.8), clock: .continuous)
         monitor.moment("idle")
         try? await Task.sleep(for: .seconds(1))
-        await tapMicrophone(model, monitor)
+        // Holding to talk, the first press starts the conversation.
+        if !scenario.holds { await tapMicrophone(model, monitor) }
         for step in scenario.steps { await perform(step, model, monitor) }
         monitor.moment("done")
         try? await Task.sleep(for: .seconds(2))
@@ -95,15 +96,29 @@ final class ConversationScript {
         case .pause(let seconds):
             try? await Task.sleep(for: .seconds(seconds))
         case .say(let text):
-            let muted = model.muted
+            let muted = model.muted, unheld = model.holdsToTalk && !model.talking
             await microphone.say(text) { words in if words == 4 { monitor.moment("hearing") } }
             if muted {
                 monitor.check("muted speech is unheard", model.userLine == nil)
+            } else if unheld {
+                try? await Task.sleep(for: .milliseconds(500))
+                monitor.check("speech without the microphone held is unheard", model.userLine == nil)
             } else if !(await monitor.wait(seconds: 3) { model.userLine != nil }) {
                 monitor.issue("the human's words never showed: \(text)")
             }
         case .tapMicrophone:
             await tapMicrophone(model, monitor)
+        case .hold(let text):
+            await hold(text, model, monitor)
+        case .tap:
+            monitor.moment("tap")
+            model.pressMicrophone()
+            try? await Task.sleep(for: .milliseconds(120))
+            model.releaseMicrophone()
+            monitor.check("a tap shows how to talk", model.showsHoldHint)
+            // A turn would show the human's words, or reopen the exchange that ended.
+            let heard = await monitor.wait(seconds: 1.5) { model.userLine != nil || !model.scriptedView.exchangeOver }
+            monitor.check("a tap starts no turn", !heard)
         case .background(let seconds):
             monitor.moment("background")
             monitor.stopping = true
@@ -150,10 +165,38 @@ final class ConversationScript {
             await waitForMicrophone(model)
             monitor.moment("start")
             monitor.stopping = false
-            model.start()
+            model.start(holdingToTalk: false)
         }
         let ready = await monitor.wait(seconds: 20) { model.active && !model.preparing }
         if !ready { monitor.issue("the microphone never became ready (\(model.error ?? "no error"))") }
+    }
+
+    /// The human holds the microphone, starting a conversation if there is none, says `text` and
+    /// lets go.
+    private func hold(_ text: String, _ model: ConversationModel, _ monitor: PreviewMonitor) async {
+        if !model.active {
+            await waitForMicrophone(model)
+            monitor.moment("start")
+            monitor.stopping = false
+            model.start(holdingToTalk: true)
+        }
+        monitor.moment("press")
+        model.pressMicrophone()
+        guard await monitor.wait(seconds: 20, until: { model.hearing }) else {
+            monitor.issue("the held microphone never listened (\(model.error ?? "no error"))")
+            model.releaseMicrophone()
+            return
+        }
+        let quiet = await monitor.wait(seconds: 0.3) { !model.scriptedView.playing && model.floor == nil }
+        monitor.check("holding the microphone quiets the characters", quiet)
+        await microphone.say(text) { words in if words == 4 { monitor.moment("hearing") } }
+        model.releaseMicrophone()
+        monitor.moment("release")
+        if !(await monitor.wait(seconds: 3) { model.userLine != nil }) {
+            monitor.issue("the human's words never showed: \(text)")
+        }
+        let ended = await monitor.wait(seconds: 3) { !model.hearing }
+        monitor.check("letting go ends the turn", ended)
     }
 
     /// Until the microphone can be tapped: it spins while Python or the models load.
@@ -173,6 +216,10 @@ struct PreviewScenario {
         case say(String)
         /// The dock's microphone: start a conversation, or mute or unmute it.
         case tapMicrophone
+        /// Holding to talk: the human holds the microphone while saying this, then lets go.
+        case hold(String)
+        /// Holding to talk: a quick tap on the microphone, which says nothing.
+        case tap
         /// The app goes to the background, as the conversation sees it, and returns after this
         /// many seconds.
         case background(Double)
@@ -200,6 +247,8 @@ struct PreviewScenario {
 
     let name: String
     let summary: String
+    /// The conversation listens only while the microphone is held.
+    var holds = false
     let steps: [Step]
     let lines: [DuoCharacter: [Line]]
 
@@ -207,7 +256,7 @@ struct PreviewScenario {
 
     /// The scenarios, the default first.
     static let all: [PreviewScenario] = [gym, bargeIn, newConversation, background, mute, longAndShort, markup,
-                                         error, debate]
+                                         error, debate, hold]
 
     static let gym = PreviewScenario(
         name: "gym", summary: "a question for the angel, debated, with verdicts",
@@ -311,6 +360,24 @@ struct PreviewScenario {
 
     private static let declined = LanguageModelError.guardrailViolation(.init(debugDescription: "Scripted decline"))
 
+    static let hold = PreviewScenario(
+        name: "hold", summary: "holding the microphone to talk: a question, a press that cuts the devil off, a "
+            + "tap, words said without holding it, and a last question",
+        holds: true,
+        steps: [.hold("Should I skip the gym today?"), .line(1), .pause(1.5),
+                .hold("Wait, Devil, what about pizza tonight?"), .floor, .pause(1), .tap, .pause(1),
+                .say("Nobody should hear these words."), .pause(1), .hold("Thanks, you two!"), .floor],
+        lines: [
+            .angel: [.says("Go to the gym today. You will feel wonderful afterwards."),
+                     .says("Devil, the sofa can wait. Health comes first."),
+                     .says("A walk first, then pizza. You will enjoy every slice even more."),
+                     .says("You are very welcome. Look after yourself.")],
+            .devil: [.says("Oh, please, Angel! Skipping one day never hurt anyone. Stay in, put your feet up, "
+                           + "and order something delicious."),
+                     .says("Pizza tonight! Now you are talking. Extra cheese, no regrets."),
+                     .says("Any time. Save me a slice.")],
+        ])
+
     static let debate = PreviewScenario(
         name: "debate", summary: "the characters argue with each other up to the six-line limit",
         steps: [.say("Is it okay to lie to my boss?"), .floor],
@@ -335,9 +402,12 @@ final class ScriptedMicrophone: SpeechInput {
     var onVAD: ((Double, Double, Double) -> Void)?
     var onLevel: ((Double) -> Void)?
     var onError: ((String) -> Void)?
+    var holdsToTalk = false
 
     private let audio: VoiceAudioEngine
     private let records: Bool
+    /// Holding to talk, the microphone is held.
+    private var listening = false
     private var recording = false
     private var quiet: Task<Void, Never>?
     private var clock = ContinuousClock.now
@@ -381,7 +451,13 @@ final class ScriptedMicrophone: SpeechInput {
         quiet?.cancel()
         quiet = nil
         speaking = false
+        listening = false
         onLevel?(0)
+    }
+
+    func listen(_ on: Bool, preRoll: Bool) async throws {
+        listening = on
+        if !on { try await finalize() }
     }
 
     func finalize() async throws {
@@ -393,8 +469,11 @@ final class ScriptedMicrophone: SpeechInput {
     func logAudioMetrics(stage: String) {}
 
     /// The human says `text`: confident speech and a growing transcript a word at a time, then quiet.
+    /// Holding to talk, words are recognized only once the microphone listens, from the first word
+    /// on as the pre-roll would catch it.
     func say(_ text: String, onWord: (Int) -> Void) async {
         speaking = true
+        var heard = false
         let words = text.split(separator: " ")
         let start = time
         for count in 1...max(1, words.count) {
@@ -403,10 +482,13 @@ final class ScriptedMicrophone: SpeechInput {
                 onLevel?(Double.random(in: 0.45...0.85))
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            onTranscript?(words.prefix(count).joined(separator: " "), false, start, time)
+            if !holdsToTalk || listening {
+                heard = true
+                onTranscript?(words.prefix(count).joined(separator: " "), false, start, time)
+            }
             onWord(count)
         }
-        final = (text, start, time)
+        if heard { final = (text, start, time) }
         speaking = false
         onLevel?(0)
     }
@@ -489,6 +571,8 @@ final class ScriptedLines: TextGenerator {
 private final class PreviewMonitor {
     private struct Screen: Equatable {
         var active = false, muted = false, preparing = false, playing = false
+        /// Holding to talk, and whether the human holds the microphone and is heard.
+        var holds = false, held = false, hearing = false
         /// The microphone spins before a conversation: Python or the models are loading.
         var loading = false
         var floor: DuoCharacter?
@@ -580,6 +664,9 @@ private final class PreviewMonitor {
         var now = Screen()
         now.active = model.active
         now.muted = model.muted
+        now.holds = model.holdsToTalk
+        now.held = model.talking
+        now.hearing = model.hearing
         now.preparing = model.preparing
         now.loading = model.loading
         now.playing = view.playing
@@ -655,8 +742,9 @@ private final class PreviewMonitor {
 
     private func describe(_ screen: Screen) -> String {
         var parts: [String] = []
-        parts.append(screen.active ? (screen.preparing ? "starting" : screen.muted ? "mic=muted" : "mic=on")
-            : screen.loading ? "loading" : "idle")
+        let microphone = screen.muted ? "mic=muted" : !screen.holds ? "mic=on"
+            : screen.hearing ? (screen.held ? "mic=held" : "mic=released") : screen.held ? "mic=pressed" : "mic=hold"
+        parts.append(screen.active ? (screen.preparing ? "starting" : microphone) : screen.loading ? "loading" : "idle")
         if screen.playing { parts.append("playing") }
         if let floor = screen.floor { parts.append("floor=\(floor.rawValue)") }
         if !screen.addressed.isEmpty { parts.append("addressed=\(screen.addressed.map(\.rawValue).sorted().joined(separator: ","))") }

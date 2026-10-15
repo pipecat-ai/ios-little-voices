@@ -26,8 +26,9 @@ its asyncio loop; SwiftUI runs on the main actor. There is no socket, subprocess
 server, and no code is downloaded.
 
 As the app comes to the front, `ConversationModel` loads Phonon's voices, Audience and the
-speech model alongside Python, so a conversation starts without waiting for them; until they
-and Python are ready the microphone is gray, with a spinner. The voices and Audience stay
+speech model, so a conversation starts without waiting for them; at launch it waits for the
+intro to play, which loading would rob of frames. Until they and Python are ready the
+microphone is gray, with a spinner. The voices and Audience stay
 loaded between conversations and are freed in the background; the speech model lingers after
 each use.
 
@@ -100,7 +101,26 @@ See [native speech](native-tts.md).
 Shortcut can run it, and iOS owns the phrase. `ConversationLaunchRequests` keeps a start that
 arrives before the view or Python is ready, and the app starts the conversation through the
 usual path once both are. Ending or backgrounding the app drops it; starting again while a
-conversation runs keeps it, unmuted.
+conversation runs keeps it, unmuted. A conversation started by voice is hands-free.
+
+### Hold to talk
+
+Settings chooses how the human takes turns (`InputMode`): holding the microphone to talk, the
+default, or hands-free, where VAD ends each turn as below. A conversation keeps the mode it
+started with.
+
+Holding to talk, pressing the microphone starts a conversation if none is running. Capture
+runs throughout the conversation, but ASR hears only a held microphone, and SoundAnalysis
+doesn't run. While the microphone is not held, `SpeechAudioInput` keeps the last 0.3 s of
+audio, which a press replays to the transcriber, so a word begun with the press is heard
+whole. A press stops the characters at once, without the pre-roll, which would carry their
+voice. Python gets `talk` events in place of VAD scores: a press begins a span of speech and
+a release ends it. A turn still needs a recognized word, so a tap starts none, and shows
+"Hold to talk" above the microphone. Listening goes on for 0.35 s after the release, for a
+last word still being said, and pressing again within it carries on the same words. Then
+`AppleSpeechRecognizer` finalizes ASR as an endpoint does (below) and closes it until the
+next press, so Python's `finalize_asr` finds nothing left to finalize. Pressing again before
+the reply begins adds to the same turn.
 
 ### Acoustic activity
 
@@ -265,14 +285,17 @@ the angel and peach for the devil, with one soft point toward its speaker.
   otherwise dots in their bubble.
 - **The human:** their words, live or final, float in a pill over the seam until a
   character's first line plays.
-- **Chrome:** Settings and New conversation sit in the top corners. Before a conversation
-  the microphone stands alone above the home indicator: hidden while the intro plays, then
-  fading in, gray with a spinner while the app still loads, then teal. During one, the dock's
-  glass widens around it and the input picker and End slide out from behind it. Its rings
-  show only while the human speaks. An error rises in a banner above the dock. The header's
-  buttons, the dock, bubbles, capsules, pill and banner share one glass (`SoftGlass`): a warm
-  tint graded lighter at the top, a soft light along its upper edge and, where it floats, a
-  soft shadow. It is solid under Reduce Transparency and outlined under Increase Contrast.
+- **Chrome:** Settings and New conversation sit in the top corners. Before a conversation the
+  microphone stands alone above the home indicator: hidden while the intro plays, then fading
+  in, gray with a spinner while the app still loads or a conversation starts, then teal. During
+  one, the dock's glass widens around it and the input picker and End slide out from behind it.
+  Its rings show only while the human speaks. Held to talk, it swells under the finger, with a
+  firm tap as it starts listening and a light one as it is let go; hands-free, a tap mutes it.
+  An error rises in a banner above the dock. The
+  header's buttons, the dock, bubbles, capsules, pill and banner share one glass (`SoftGlass`):
+  a warm tint graded lighter at the top, a soft light along its upper edge and, where it
+  floats, a soft shadow. It is solid under Reduce Transparency and outlined under Increase
+  Contrast.
 - **New conversation:** the conversation clears at once, and a snapshot of the old screen is
   wiped away from the top behind a glowing edge that waves like the seam (`ResetWipe`), or
   fades under Reduce Motion. Core Animation runs it, so it keeps its pace while the
@@ -301,14 +324,14 @@ the angel and peach for the devil, with one soft point toward its speaker.
   hands over to him and the angel is squished against it (she eeps) while he cackles. He lets
   go, the seam is released, and she glares down at him and shoves back, taking the floor in
   turn while he is squished (he oofs). Without a voice there is no talking, and the idle drift
-  eases out rather than collapsing. As they make up with a cheeky wink and a giggle, the
-  Little Voices logo (`IntroLogo`) drops in from above with a bounce, holds in the middle of
-  the screen for 2 s with a soft glow behind it, and slides back up and fades (under Reduce
-  Motion it fades in and out); once it has gone, about 6.5 s in, the microphone fades in. A
-  conversation starting meanwhile (`active` or `preparing`, as from a Shortcut) hands over at
-  once: no more beats, anyone unseen pops in, and a shover's floor is let go. It plays once
-  per launch, not on returning from the background, and pauses with the scene. Under Prefer
-  Cross-Fade Transitions its shoves and releases cross-fade, as a conversation's handovers do.
+  eases out rather than collapsing. As they make up with a cheeky wink and a giggle, the Little
+  Voices logo (`IntroLogo`) drops in from above with a bounce, holds in the middle of the
+  screen for 2 s with a soft glow behind it, and slides back up and fades; once it has gone,
+  about 6.5 s in, the microphone fades in. A conversation starting meanwhile (`active` or
+  `preparing`, as from a Shortcut) hands over at once: no more beats, anyone unseen pops in,
+  and a shover's floor is let go. It plays once per launch, not on returning from the
+  background, and pauses with the scene. Under Prefer Cross-Fade Transitions its shoves and
+  releases cross-fade, as a conversation's handovers do.
 - **The speaker's mouth:** the talking face's own mouth is lip sync's rest, a closed smile.
   Taking the floor, the speaker's mouth closes from the listener's on its springs, and lip
   sync takes over as the voice starts; a speaker keeping the floor in silence keeps it shut.
@@ -375,25 +398,24 @@ has run dry), and reports whether playback drained or was stopped.
   drawn-out words are the word held ("Sooo"), possessives and plurals the dictionary lacks
   add their S or Z, and anything else gets letter-to-sound rules.
 - `LipsyncAligner` aligns the phones to the audio. Each hop is described by its loudness
-  against a decaying peak, the change in loudness across it, its zero-crossing rate and 12
-  mel cepstra, normalized per voice. `LipsyncAlignerModel` holds a Gaussian over those
-  features and a log-normal duration for every phone, trained by flat-start Viterbi
-  re-estimation on Phonon speech. `scripts/lipsync/train_aligner.py` regenerates it in a few
-  minutes: it speaks `scripts/lipsync/sentences.txt` in eight stock voices with the local
-  checkpoint, measures the speech with the app's own code and retrains. Run it with
-  `uv run --no-sync --with numpy python scripts/lipsync/train_aligner.py`, adding `--voices`
-  to train on others, such as a new voice. A hidden semi-Markov model walks
-  the sentence: silence, each word's phones, a pause after a word (likely after a comma or
-  a full stop, rare otherwise), silence. After every chunk, Viterbi decoding gives the
-  likeliest timing of the hops so far with the last phone still in progress, so later
-  audio can move the boundaries of hops not yet heard. Five decoders cover speaking rates
-  from 0.8 to 1.75 times the model's durations, leaning toward the rate the voice used
-  last. The phone in progress and the next ones are predicted 40 ms past the audio, so a
-  mouth whose audio arrives just in time keeps up. When the aligned phones explain a
-  second of speech much worse than the best-fitting phones of any kind (by more than 0.65
-  a hop in the model's scaled log-likelihood), the alignment is lost for the rest of the
-  sentence and the formant analysis takes over. Sentences of more than 300 phones and
-  pauses, or 20 s of audio, are left to formant analysis.
+  against a decaying peak, the change in loudness across it, its zero-crossing rate and 12 mel
+  cepstra, normalized per voice. `LipsyncAlignerModel` holds a Gaussian over those features and
+  a log-normal duration for every phone, trained by flat-start Viterbi re-estimation on Phonon
+  speech. `scripts/lipsync/train_aligner.py` regenerates it in a few minutes: it speaks
+  `scripts/lipsync/sentences.txt` in the characters' voices and eight of Gradium's with the
+  local checkpoint, measures the speech with the app's own code and retrains. Run it with
+  `uv run --no-sync --with numpy python scripts/lipsync/train_aligner.py`, adding `--voices` to
+  train on others, such as a new voice. A hidden semi-Markov model walks the sentence: silence,
+  each word's phones, a pause after a word (likely after a comma or a full stop, rare
+  otherwise), silence. After every chunk, Viterbi decoding gives the likeliest timing of the
+  hops so far with the last phone still in progress, so later audio can move the boundaries of
+  hops not yet heard. Five decoders cover speaking rates from 0.8 to 1.75 times the model's
+  durations, leaning toward the rate the voice used last. The phone in progress and the next
+  ones are predicted 40 ms past the audio, so a mouth whose audio arrives just in time keeps
+  up. When the aligned phones explain a second of speech much worse than the best-fitting
+  phones of any kind (by more than 0.65 a hop in the model's scaled log-likelihood), the
+  alignment is lost for the rest of the sentence and the formant analysis takes over. Sentences
+  of more than 300 phones and pauses, or 20 s of audio, are left to formant analysis.
 - `LipsyncVisemes` gives each phone a target on the analyzer's scale (openness, width,
   rounding): rounded vowels (as in "who", "go", "saw") round the lips, spread ones ("see",
   "sit") widen them, open ones ("father", "cat") open the jaw, F and V hold the lips narrow
@@ -479,10 +501,11 @@ are an error.
 
 `scripts/setup.py` downloads the pipecat-ai release wheel, checks its SHA-256 and applies
 `patches/pipecat-ai-1.12.0.patch` to it in `.build/pipecat-ai/` (`scripts/pipecat_package.py`).
-It checks the Phonon checkpoint (`scripts/phonon_package.py`) and Audience
-(`scripts/audience_package.py`), then `scripts/build_native.py` cross-compiles pydantic-core
-against the target's Python and builds `native/phonon-ffi`, a static library around `ptts`,
-for the device and the Simulator. The generated project links it and uses no Swift packages.
+It checks the Phonon checkpoint and the characters' voices (`scripts/phonon_package.py`) and
+Audience (`scripts/audience_package.py`), then `scripts/build_native.py` cross-compiles
+pydantic-core against the target's Python and builds `native/phonon-ffi`, a static library
+around `ptts`, for the device and the Simulator. The generated project links it and uses no
+Swift packages.
 
 The "Bundle Python, Phonon and Audience" build phase runs `scripts/bundle_runtime.py`:
 
@@ -493,9 +516,9 @@ The "Bundle Python, Phonon and Audience" build phase runs `scripts/bundle_runtim
   patched Pipecat only the modules the app's code could import, following imports through
   Pipecat, including inside functions, with its distribution metadata. Native modules become
   signed frameworks.
-- **Models:** the checkpoint's `config.json`, `model.q8.gguf`, `tokenizer.json` and the cast's
-  voices into `phonon/`, and the Audience models compiled into `audience/`. Nothing is
-  downloaded.
+- **Models:** the checkpoint's `config.json`, `model.q8.gguf` and `tokenizer.json`, and the
+  characters' voices from `src/voices/`, into `phonon/`, and the Audience models compiled into
+  `audience/`. Nothing is downloaded.
 
 The bundled Python's versions are pinned by `uv.lock` and recorded in
 `.build/mobile-package-manifest.json`, which builds check; after changing them, run

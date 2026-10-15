@@ -96,8 +96,8 @@ struct HandoverScript: Equatable, Sendable {
 
 /// The moving seam between the two halves: base, bulge, wave, windup, pulse and relax springs,
 /// the ripple chain, the wave's phase, the idle drift, the handover choreography with its impact
-/// and draw-order flip, and the walls. Values are band fractions; it
-/// knows nothing of presets, which `StageSimulation` turns into shapes through `StageLayout`.
+/// and draw-order flip, and the walls. Values are band fractions; it knows nothing of presets,
+/// which `StageSimulation` turns into shapes through `StageLayout`.
 struct SeamRig: Sendable {
     /// Which secondary motions run.
     struct Options: Equatable, Sendable {
@@ -333,9 +333,8 @@ struct SeamRig: Sendable {
         phaseRate = 0
     }
 
-    /// Reduce Motion's held pose: unrelaxed, without breath, the drift resting as its
-    /// still S-curve and the wave static at its resting phase. `settle()` then snaps the springs
-    /// to it.
+    /// Reduce Motion's held pose: unrelaxed, without breath, the drift resting as its still
+    /// S-curve and the wave static at its resting phase. `settle()` then snaps the springs to it.
     mutating func holdPose() {
         relax.retarget(0)
         breath.retarget(0)
@@ -523,8 +522,7 @@ struct SeamRig: Sendable {
         let s = effectiveShape
         let centre = s.base + windup.value
         let bulgeTerm = s.bulge * (1 + 0.06 * energyAngel)
-        var reach = abs(s.wave) + abs(s.drift) + abs(pulse.value)
-            + abs(breath.value) * Self.breathAmplitude
+        var reach = abs(s.wave) + abs(s.drift) + abs(pulse.value) + abs(breath.value) * Self.breathAmplitude
         if options.ripple { reach += 1.25 * rippleMagnitude }
         if limits.maxLowest.isFinite, centre + max(0, bulgeTerm) + reach > limits.maxLowest {
             let lowest = extreme(lowest: true)
@@ -627,10 +625,8 @@ struct SeamRig: Sendable {
     /// Every spring but the breath settled, the ripple still, the wave not travelling and no
     /// choreography pending (the drift may flow at its settled amplitude).
     var isMotionSettled: Bool {
-        guard base.isSettled, bulge.isSettled, wave.isSettled, windup.isSettled, pulse.isSettled,
-              relax.isSettled, drift.isSettled, driftStill.isSettled, phaseRate == 0 else {
-            return false
-        }
+        guard base.isSettled, bulge.isSettled, wave.isSettled, windup.isSettled, pulse.isSettled, relax.isSettled,
+              drift.isSettled, driftStill.isSettled, phaseRate == 0 else { return false }
         if case .handover(let handover) = motion, !handover.launched || !handover.baseStarted { return false }
         for i in 0..<Self.rippleCount where abs(ripple[i]) > 1e-5 || abs(rippleVelocity[i]) > 1e-4 {
             return false
@@ -646,9 +642,7 @@ struct SeamRig: Sendable {
 
     /// The largest spring speed, for the Reduce Motion checks.
     var maxSpringSpeed: Double {
-        [base, bulge, wave, windup, pulse, relax, breath, drift, driftStill].reduce(0) {
-            max($0, abs($1.velocity))
-        }
+        [base, bulge, wave, windup, pulse, relax, breath, drift, driftStill].reduce(0) { max($0, abs($1.velocity)) }
     }
 
     private mutating func use(base baseSpec: SpringSpec, bulge bulgeSpec: SpringSpec) {

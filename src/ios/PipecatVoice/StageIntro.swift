@@ -151,14 +151,8 @@ struct StageIntro: Sendable {
         pops[c].map { FacePop(after: t - $0) } ?? .unseen
     }
 
-    /// The next beat's time.
-    var nextBeat: Double? {
-        guard let start, next < Self.beats.count else { return nil }
-        return start + Self.beats[next].time
-    }
-
-    /// Its last look has not ended, unless a conversation took over, or a face is still popping
-    /// in; false while it waits to start.
+    /// Its beats or its logo have not finished, unless a conversation took over, or a face is
+    /// still popping in; false while it waits to start.
     func isRunning(at t: Double) -> Bool {
         guard let start else { return false }
         return !handedOver && t - start < Self.length

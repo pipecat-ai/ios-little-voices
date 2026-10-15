@@ -140,6 +140,12 @@ class Host:
             }
         )
 
+    async def talk(self, bridge, talking, *, session=None):
+        """Press (`talking`) or release a microphone held to talk."""
+        await bridge.receive(
+            {"type": "talk", "talking": talking, "session": session or self.session}
+        )
+
     async def begin_speech(self, bridge, *, text="Hello"):
         marker = len(self.events)
         await self.vad(bridge, 0.95)

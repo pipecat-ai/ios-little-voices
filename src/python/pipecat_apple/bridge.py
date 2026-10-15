@@ -36,9 +36,11 @@ class AppleNativeBridge:
 
     From the host (:meth:`receive`): ``start``, ``stop``, ``reset``, ``mute``,
     ``unmute`` and ``interrupt`` control the session; ``vad`` and
-    ``transcription`` carry speech input; ``playback`` reports a speak request's
-    audio starting and stopping; and ``result`` answers a request (``delta``,
-    ``value``, ``done`` or ``error``).
+    ``transcription`` carry speech input, with ``talk`` in place of ``vad`` for
+    a microphone held to talk (``talking`` as it is pressed, not as it is
+    released); ``playback`` reports a speak request's audio starting and
+    stopping; and ``result`` answers a request (``delta``, ``value``, ``done``
+    or ``error``).
 
     To the host (``emit``): ``ready`` and ``error`` for the pipeline;
     ``user_turn`` when speech starts a turn; ``request`` and ``cancel_request``
@@ -279,7 +281,7 @@ class AppleNativeBridge:
         if kind == "playback":
             await transport.output().playback_changed(event)
             return
-        if kind in {"vad", "transcription"} and (not self.active or self.muted):
+        if kind in {"vad", "talk", "transcription"} and (not self.active or self.muted):
             return
         if kind == "stop":
             self.active = False

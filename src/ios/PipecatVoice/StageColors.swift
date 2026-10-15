@@ -171,7 +171,7 @@ struct StageColors: Equatable, Sendable {
     /// The dock's round side buttons, a lighter soft glass inside the dock.
     var dockButton: RGBA
     /// The microphone button, top to bottom, deepening toward the bottom: teal-green, red while
-    /// muted, and a warm gray while it loads.
+    /// muted, and a warm gray while the app loads or a conversation starts.
     var micFill: [GradientStop]
     var micMutedFill: [GradientStop]
     var micLoadingFill: [GradientStop]

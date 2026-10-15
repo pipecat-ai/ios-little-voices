@@ -7,9 +7,10 @@ licence texts that several of them use are at the end.
 
 Phonon, the on-device text-to-speech model, is provided by [Gradium](https://gradium.ai).
 
-- The model and its voices are used under Gradium's terms. They are not in this repository:
-  obtain the checkpoint from Gradium and place it in `models/phonon/`; app builds bundle its
-  weights, config, tokenizer and the characters' voices.
+- The model and its voices are used under Gradium's terms, not this repository's licence.
+  The checkpoint is not in this repository: obtain it from Gradium and place it in
+  `models/phonon/`. The characters' voices are in `src/voices/`. App builds bundle the
+  checkpoint's weights, config and tokenizer with the voices.
 - Its runtime, Gradium's [`ptts`](https://github.com/gradium-ai/xn-ptts) crate, is licensed
   under MIT OR Apache-2.0. Cargo fetches it and the crates below from crates.io, and they are
   compiled into the app through `native/phonon-ffi`.

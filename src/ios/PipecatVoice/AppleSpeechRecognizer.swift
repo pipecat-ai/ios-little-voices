@@ -7,6 +7,8 @@ private final class RecognitionSession {
     let analyzer: SpeechAnalyzer
     let input: AsyncStream<AnalyzerInput>.Continuation
     let results: Task<Void, Error>
+    /// Audio has gone to its input.
+    var fed = false
 
     init(analyzer: SpeechAnalyzer, input: AsyncStream<AnalyzerInput>.Continuation, results: Task<Void, Error>) {
         self.analyzer = analyzer
@@ -30,7 +32,12 @@ final class AppleSpeechRecognizer {
     private var locale: Locale?
     private var finalizationTask: Task<Void, Error>?
     private var epoch = UUID()
-    private let logger = Logger(subsystem: "ai.pipecat.voice", category: "Speech")
+    /// Hold to talk: speech is recognized only while `listening`, and nothing scores speech
+    /// activity. Set before `start`.
+    var holdsToTalk = false
+    /// Hold to talk: the microphone is held.
+    private var listening = false
+    private let logger = Logger(subsystem: "ai.pipecat.littlevoices", category: "Speech")
     /// The speech model lingers after an analyzer finishes, so the next one, for the next turn
     /// or conversation, starts without loading it.
     private static let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .lingering)
@@ -58,6 +65,7 @@ final class AppleSpeechRecognizer {
     }
 
     /// Start recognizing on a fresh input generation: callbacks from an earlier one are dropped.
+    /// Holding to talk, recognition waits for `listen(true)`.
     func start() async throws {
         let generation = UUID()
         let previous = resetCapture(generation: generation)
@@ -101,8 +109,10 @@ final class AppleSpeechRecognizer {
             throw CancellationError()
         }
         self.session = session
+        session.fed = !holdsToTalk
         do {
-            let capture = try SpeechAudioInput(sourceFormat: hardware, format: format, input: session.input,
+            let capture = try SpeechAudioInput(sourceFormat: hardware, format: format,
+                input: holdsToTalk ? nil : session.input,
                 onVAD: { [weak self] confidence, time, volume in
                     Task { @MainActor in
                         guard let self, self.epoch == generation else { return }
@@ -118,7 +128,7 @@ final class AppleSpeechRecognizer {
                         guard let self, self.epoch == generation else { return }
                         self.onError?(message)
                     }
-                })
+                }, classifiesSpeech: !holdsToTalk)
             self.capture = capture
             try audio.startCapture { buffer, _ in capture.consume(buffer) }
         } catch {
@@ -159,9 +169,30 @@ final class AppleSpeechRecognizer {
         return RecognitionSession(analyzer: analyzer, input: continuation, results: results)
     }
 
+    /// Hold to talk: open recognition as the microphone is pressed, with the pre-roll unless
+    /// `preRoll` is false, or finalize and close it as it is released.
+    func listen(_ on: Bool, preRoll: Bool = true) async throws {
+        listening = on
+        let generation = epoch
+        // A finalization in progress opens the next session itself if the microphone is held.
+        while let finalizationTask {
+            try await finalizationTask.value
+            guard epoch == generation else { throw CancellationError() }
+        }
+        guard listening == on, let session, let capture else { return }
+        if on {
+            guard !session.fed else { return }
+            session.fed = true
+            try await capture.resumeASR(session.input, replaying: preRoll)
+        } else {
+            try await finalize()
+        }
+    }
+
     /// Finish an utterance without ending capture or VAD. Apple finalize(through:)
     /// publishes results but offers no consumer barrier. Rotating only the ASR
     /// session lets us await its result stream before acknowledging the endpoint.
+    /// Holding to talk, a session nothing has been said into needs none.
     func finalize() async throws {
         let generation = epoch
         // An earlier endpoint may still be rotating ASR after resumed speech
@@ -176,6 +207,7 @@ final class AppleSpeechRecognizer {
         guard let capture, let previous = session, let format, let locale else {
             throw CancellationError()
         }
+        guard previous.fed else { return }
         // This unstructured task survives cancellation of the Python request that
         // asked for finalization, so resumed user speech cannot strand capture.
         let task = Task(priority: .userInitiated) { [weak self] in
@@ -194,7 +226,12 @@ final class AppleSpeechRecognizer {
                 try await previous.results.value
                 guard self.epoch == generation, !Task.isCancelled else { throw CancellationError() }
                 self.session = replacement
-                try await capture.resumeASR(replacement.input)
+                if self.holdsToTalk, !self.listening {
+                    try await capture.closeASR()
+                } else {
+                    replacement.fed = true
+                    try await capture.resumeASR(replacement.input)
+                }
             } catch {
                 await replacement.cancel()
                 throw error
@@ -211,6 +248,7 @@ final class AppleSpeechRecognizer {
 
     private func resetCapture(generation: UUID) -> RecognitionSession? {
         epoch = generation
+        listening = false
         audio.stopCapture()
         capture?.cancel()
         capture = nil

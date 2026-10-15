@@ -67,10 +67,11 @@ patch, `uv run --no-sync python scripts/setup.py --pipecat-only`.
 ## Run
 
 **On an iPhone.** Open `PipecatVoice.xcodeproj`, choose your signing team for the
-**PipecatVoice** target, and run. Tap the microphone and ask a question; pause to finish your
-turn. Speak at any time to cut in. Tap the microphone again to mute, End to finish, and New
-conversation to start afresh. In Settings, give your name (or pick your contact) so the
-characters can greet you, and set up "Hey Little Voices" with Apple's Vocal Shortcuts. The
+**PipecatVoice** target, and run. Hold the microphone, ask a question and let go. Hold it
+again at any time to cut in, End to finish, and New conversation to start afresh. In
+Settings, choose hands-free instead (tap the microphone once, pause to finish each turn, and
+speak to cut in), give your name (or pick your contact) so the characters can greet you, and
+set up "Hey Little Voices" with Apple's Vocal Shortcuts. The
 button beside the microphone opens Apple's microphone picker.
 
 **In the Simulator.** Apple's on-device speech recognition doesn't run there, so you can't
@@ -80,7 +81,7 @@ talk to the characters. The scripted conversations run the rest of the app inste
 xcodebuild -project PipecatVoice.xcodeproj -scheme PipecatVoice -configuration Debug \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath .build/DerivedData build
 xcrun simctl install booted .build/DerivedData/Build/Products/Debug-iphonesimulator/PipecatVoice.app
-xcrun simctl launch --console-pty booted ai.pipecat.voice --preview-duo barge-in
+xcrun simctl launch --console-pty booted ai.pipecat.littlevoices --preview-duo barge-in
 ```
 
 `--demo-question` also works in the Simulator when the Mac has Apple Intelligence turned on.
@@ -90,7 +91,7 @@ xcrun simctl launch --console-pty booted ai.pipecat.voice --preview-duo barge-in
 
 | Argument | What it does |
 | --- | --- |
-| `--preview-duo [scenario]` | Plays a scripted conversation through the whole app, with stand-ins for the microphone and the language model, and flags anything the screen should never show: `gym` (the default), `barge-in`, `new-conversation`, `background`, `mute`, `long-and-short`, `markup`, `error`, `debate`. |
+| `--preview-duo [scenario]` | Plays a scripted conversation through the whole app, with stand-ins for the microphone and the language model, and flags anything the screen should never show: `gym` (the default), `barge-in`, `new-conversation`, `background`, `mute`, `long-and-short`, `markup`, `error`, `debate`, `hold`. |
 | `--record-audio`, `--preview-buffered` | With `--preview-duo`: record what plays; synthesize each sentence in full before it plays. |
 | `--demo-question "…"` | Asks the live language model a question for you and records what plays. |
 | `--verify-phonon`, `--verify-phonon-playback` | Check Phonon synthesis, and playback, cancellation and restart. |
@@ -143,12 +144,15 @@ src/python/mobile_app/           the Pipecat bot, the director and the character
 src/python/pipecat_apple/        Pipecat services for the native host: the bridge, speech
                                  recognition, the language model, Phonon, transport and VAD
 src/python/spellspeak_audience/  SpellSpeak Audience's reference runtime (vendored)
+src/voices/                      the characters' Phonon voices
+src/branding/                    the app icon, launch art and logo, and their export
 patches/                         the app's patch to the Pipecat release (patches/README.md)
 native/phonon-ffi/               a C interface to Gradium's ptts runtime, in Rust
 scripts/                         setup, native builds, packaging, project generation
 tests/                           Python tests, and Swift checks in tests/native/
 models/                          the Phonon checkpoint and Audience models (not in Git)
-docs/                            architecture, native speech, validation
+docs/                            architecture, native speech, validation, App Store
+                                 submission and the privacy policy
 ```
 
 ## Credits and licences

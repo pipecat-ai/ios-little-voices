@@ -147,6 +147,9 @@ final class SpeechVADQueue: @unchecked Sendable {
 /// worker. The lock protects capture admission and callback snapshots only.
 final class SpeechAudioInput: @unchecked Sendable {
     static let asrBufferCapacity = 192
+    /// The audio kept while ASR is closed, between pushes to talk: a word begun with the press is
+    /// heard from its start.
+    static let preRollSeconds = 0.3
 
     struct Snapshot: Sendable {
         let capturedSeconds: Double
@@ -184,17 +187,22 @@ final class SpeechAudioInput: @unchecked Sendable {
     private var input: AsyncStream<AnalyzerInput>.Continuation?
     private var retained: [AnalyzerInput] = []
     private var retainedFrames = 0
+    /// ASR is closed (`closeASR`): only the pre-roll is retained.
+    private var closed = false
     private var position: AVAudioFramePosition = 0
     private var energies: [(end: Double, duration: Double, energy: Double)] = []
     private let onVAD: @Sendable (Double, Double, Double) -> Void
     private let onLevel: @Sendable (Double) -> Void
     private let onError: @Sendable (String) -> Void
 
+    /// `input` nil starts with ASR closed. Without `classifiesSpeech`, nothing scores speech and
+    /// `onVAD` is never called, as when a push to talk marks the human's turns.
     init(sourceFormat: AVAudioFormat, format: AVAudioFormat,
-         input: AsyncStream<AnalyzerInput>.Continuation,
+         input: AsyncStream<AnalyzerInput>.Continuation?,
          onVAD: @escaping @Sendable (Double, Double, Double) -> Void,
          onLevel: @escaping @Sendable (Double) -> Void,
          onError: @escaping @Sendable (String) -> Void,
+         classifiesSpeech: Bool = true,
          vadAnalysis: ((AVAudioPCMBuffer, AVAudioFramePosition) -> Void)? = nil,
          asrBufferCapacity: Int = SpeechAudioInput.asrBufferCapacity) throws {
         guard let converter = AVAudioConverter(from: sourceFormat, to: format) else {
@@ -204,6 +212,7 @@ final class SpeechAudioInput: @unchecked Sendable {
         self.format = format
         self.asrCapacity = asrBufferCapacity
         self.input = input
+        closed = input == nil
         self.onVAD = onVAD
         self.onLevel = onLevel
         self.onError = onError
@@ -211,6 +220,10 @@ final class SpeechAudioInput: @unchecked Sendable {
         // conversion and backpressure with a deterministic classifier stall.
         if let vadAnalysis {
             vad = SpeechVADQueue(analyze: vadAnalysis)
+            return
+        }
+        guard classifiesSpeech else {
+            vad = SpeechVADQueue(analyze: { _, _ in })
             return
         }
         let soundAnalyzer = SNAudioStreamAnalyzer(format: format)
@@ -328,6 +341,7 @@ final class SpeechAudioInput: @unchecked Sendable {
         } else {
             retained.append(frame)
             retainedFrames += Int(converted.frameLength)
+            if closed { trimToPreRoll() }
             guard retainedFrames <= Int(format.sampleRate * 4) else {
                 throw VoiceError(message: "Speech recognition took too long to finish your turn. Tap the microphone to start again.")
             }
@@ -358,17 +372,30 @@ final class SpeechAudioInput: @unchecked Sendable {
     /// End only the current ASR input. Capture and acoustic VAD keep running, and
     /// all subsequent audio is retained until the replacement transcriber is ready.
     func pauseASR() async throws {
+        try await endASR(closing: false)
+    }
+
+    /// End the current ASR input between pushes to talk, retaining only the latest
+    /// `preRollSeconds` of what follows.
+    func closeASR() async throws {
+        try await endASR(closing: true)
+    }
+
+    private func endASR(closing: Bool) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
                 guard isActive else { continuation.resume(throwing: CancellationError()); return }
                 input?.finish()
                 input = nil
+                closed = closing
+                if closing { trimToPreRoll() }
                 continuation.resume()
             }
         }
     }
 
-    func resumeASR(_ continuation: AsyncStream<AnalyzerInput>.Continuation) async throws {
+    /// Feed `continuation` the retained audio, unless `replaying` is false, then all that follows.
+    func resumeASR(_ continuation: AsyncStream<AnalyzerInput>.Continuation, replaying: Bool = true) async throws {
         try await withCheckedThrowingContinuation { (completion: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
                 guard isActive else {
@@ -377,13 +404,24 @@ final class SpeechAudioInput: @unchecked Sendable {
                     return
                 }
                 do {
-                    for frame in retained { try deliver(frame, to: continuation) }
+                    if replaying { for frame in retained { try deliver(frame, to: continuation) } }
                     retained.removeAll(keepingCapacity: true)
                     retainedFrames = 0
                     input = continuation
+                    closed = false
                     completion.resume()
                 } catch { completion.resume(throwing: error) }
             }
+        }
+    }
+
+    private func trimToPreRoll() {
+        let limit = Int(format.sampleRate * Self.preRollSeconds)
+        while let first = retained.first {
+            let frames = Int((first.bufferDuration.seconds * format.sampleRate).rounded())
+            guard retainedFrames - frames >= limit else { break }
+            retained.removeFirst()
+            retainedFrames -= frames
         }
     }
 

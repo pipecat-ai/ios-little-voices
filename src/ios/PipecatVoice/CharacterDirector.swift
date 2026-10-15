@@ -40,7 +40,7 @@ enum StageGesture: String, Sendable {
     case curious
     case wink
     case cheekyWink
-    /// The launch intro's: popping in, shoving the other along the seam, and being shoved.
+    /// The launch intro's: popping in, shoving the other off the floor, and being squished.
     case popIn
     case shove
     case squish

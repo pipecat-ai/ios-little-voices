@@ -161,6 +161,45 @@ enum SpeechInputChecks {
         precondition(blockedCapture.errors.count == 1 && blockedCapture.errors[0].contains("Microphone processing fell behind"))
         heldCapture.cancel()
         releaseCapture.signal()
-        print("SPEECH_INPUT_CHECKS_PASSED: blocked classifier preserves ASR and handoff, VAD shedding/staleness bounded, capture and ASR overflow explicit")
+
+        // Holding to talk: closed ASR keeps only the pre-roll, for as long as it stays closed,
+        // and a press replays it ahead of live audio on the same timeline, or skips it.
+        let held = Observations()
+        let pushToTalk = try SpeechAudioInput(sourceFormat: format, format: asrFormat, input: nil,
+            onVAD: { _, _, _ in held.fail("speech was scored") }, onLevel: { _ in },
+            onError: { held.fail($0) }, classifiesSpeech: false)
+        defer { pushToTalk.cancel() }
+        // Within the capture budget: a batch at a time, as a microphone delivers them.
+        func speak(_ indices: Range<Int>) async throws {
+            for batch in stride(from: indices.lowerBound, to: indices.upperBound, by: 20) {
+                for index in batch..<min(batch + 20, indices.upperBound) { pushToTalk.consume(buffer(index)) }
+                try await wait("capture drain; errors=\(held.errors)") {
+                    pushToTalk.snapshot.pendingSeconds < 0.000_001 || !held.errors.isEmpty
+                }
+            }
+        }
+        try await speak(0..<60)
+        let (pressed, pressedInput) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingNewest(192))
+        try await pushToTalk.resumeASR(pressedInput)
+        try await speak(60..<65)
+        try await pushToTalk.closeASR()
+        var spoken: [AnalyzerInput] = []
+        for await frame in pressed { spoken.append(frame) }
+        let preRoll = Int(SpeechAudioInput.preRollSeconds / 0.02)
+        precondition(spoken.count == preRoll + 5, "\(spoken.count) frames after a press")
+        for (offset, frame) in spoken.enumerated() {
+            precondition(abs(frame.bufferStartTime!.seconds - Double(60 - preRoll + offset) * 0.02) < 0.000_001)
+            precondition(matches(frame, 60 - preRoll + offset))
+        }
+        try await speak(65..<120)
+        let (cut, cutInput) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingNewest(192))
+        try await pushToTalk.resumeASR(cutInput, replaying: false)
+        try await speak(120..<121)
+        try await pushToTalk.pauseASR()
+        var live: [AnalyzerInput] = []
+        for await frame in cut { live.append(frame) }
+        precondition(live.count == 1 && matches(live[0], 120))
+        precondition(held.errors.isEmpty, "\(held.errors)")
+        print("SPEECH_INPUT_CHECKS_PASSED: blocked classifier preserves ASR and handoff, VAD shedding/staleness bounded, capture and ASR overflow explicit, push-to-talk pre-roll")
     }
 }

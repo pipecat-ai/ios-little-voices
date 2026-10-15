@@ -199,8 +199,9 @@ final class AudienceModel: @unchecked Sendable {
 }
 
 /// Runs Audience off the main actor, one request at a time, with the bundled models loaded on
-/// first use (or ahead of time with `prepare`). Models that fail to load are not retried: each
-/// request fails at once, and Python reads the line with SpellSpeak's rules baseline instead.
+/// first use (or ahead of time with `prepare`). Models that fail to load are not retried until
+/// `unload`: each request fails at once, and Python reads the line with SpellSpeak's rules
+/// baseline instead.
 final class AudienceRunner: @unchecked Sendable {
     private let queue = DispatchQueue(label: "voice.audience", qos: .userInitiated)
     // Touched only on `queue`.

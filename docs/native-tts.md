@@ -15,8 +15,8 @@ Swift's `PhononSynthesizer` runs the bundled checkpoint through `native/phonon-f
 Rust library around Gradium's open-source `ptts` runtime (0.4.0-rc.1):
 
 - `prepare(voices:)` loads the model with every voice of the cast (`VoiceSettings.voices`: the
-  angel's `Angel_F01`, then the devil's `Devil_01`, from `src/voices`); `phonon_speak` takes the index of a
-  request's voice, so the voice changes per sentence without reloading.
+  angel's `Angel_F01`, then the devil's `Devil_01`, from `src/voices`); `phonon_speak` takes
+  the index of a request's voice, so the voice changes per sentence without reloading.
 - `synthesize(_:voice:)` streams mono Float32 at 24 kHz; each `SpeechSynthesis` request owns
   its stream, cancellation and completion.
 - `unload()` waits for the runtime, so a model still running is never released.
@@ -108,6 +108,7 @@ Debug builds accept these launch arguments; Release builds compile none of them 
   | `markup` | Emoji, Markdown and odd punctuation, and lines with nothing to say aloud. |
   | `error` | A declined opening the other character takes, an exchange neither can begin, and a later line that fails. |
   | `debate` | The characters argue up to the six-line limit. |
+  | `hold` | Holding the microphone to talk: a question, a press that cuts the devil off, a tap, words said without holding it, and a last question. |
 
   It logs `DUO_PREVIEW_STATE: <moment> (t=<s>)` at each moment, `DUO_PREVIEW_TRACE` when what
   the screen shows changes, `DUO_PREVIEW_MODEL` for each scripted line, `DUO_PREVIEW_CHECK`

@@ -1958,9 +1958,10 @@ extension StageRigChecks {
     /// With nobody on the floor the seam is one smooth S that rolls and swells, on the start
     /// screen as in a conversation: never more than one crest and one trough, level on average at
     /// every point and at every moment (no bowl or lean toward either half), within the drift's
-    /// amplitude of the band's middle and calm from frame to frame, with its soft edge showing. Three minutes after the last input it settles into its
-    /// still S-curve and the stage sleeps; an input or the app's return sets it flowing again
-    /// without a jump. Under Reduce Motion it is the still S-curve.
+    /// amplitude of the band's middle and calm from frame to frame, with its soft edge showing.
+    /// Three minutes after the last input it settles into its still S-curve and the stage sleeps;
+    /// an input or the app's return sets it flowing again without a jump. Under Reduce Motion it
+    /// is the still S-curve.
     static func idleDrift() {
         let m = StageMetrics.iPhone18Pro
         let a = SeamShape.idleDrift
@@ -3568,14 +3569,15 @@ extension StageRigChecks {
     /// stretching tall and squashing wide; they notice each other and shove each other in turn,
     /// each taking the floor as a speaker does, coming on top as the seam sweeps deep into the
     /// other's half and the other squished and pushed away; then they make up and settle into the
-    /// idle stage, the angel on top as at launch, in 4–5 s. It never jumps, on any device or at any cadence, and replays exactly; a
-    /// conversation starting at any moment hands it over smoothly; it plays once and pauses with
+    /// idle stage, the angel on top as at launch, in 4–5 s, as the logo drops in. It never jumps,
+    /// on any device or at any cadence, and replays exactly; a conversation starting at any moment
+    /// hands it over smoothly; it plays once and pauses with
     /// the scene; and under Reduce Motion the faces fade in, unmoving.
     static func intro() {
         let m = StageMetrics.iPhone18Pro
         let beats = StageIntro.beats
 
-        // The choreography: in order and 4–5 s long; the devil starts the shoving and the angel
+        // The choreography: in order, its beats 4–5 s long; the devil starts the shoving and the angel
         // has the last shove.
         check(zip(beats, beats.dropFirst()).allSatisfy { $0.time <= $1.time }, "the intro's beats are in order")
         let length = beats.map { time, beat -> Double in
@@ -3584,7 +3586,7 @@ extension StageRigChecks {
             case .windUp, .shove, .letGo: time
             }
         }.max()!
-        check((4...5).contains(length), "the intro lasts \(length) s")
+        check((4...5).contains(length), "the intro's beats last \(length) s")
         let shovers = beats.compactMap { beat -> DuoCharacter? in
             if case .shove(let c) = beat.beat { c } else { nil }
         }
@@ -3800,8 +3802,8 @@ extension StageRigChecks {
         }
         check(handovers == moments.count, "\(handovers) hand-overs")
 
-        // A whole conversation starting mid-intro, as a scripted run's tap on the microphone may:
-        // the human asks, the angel answers and the devil replies, handovers both ways.
+        // A whole conversation starting mid-intro, as a Shortcut may: the human asks, the angel
+        // answers and the devil replies, handovers both ways.
         for (k, at) in [0.1, 0.5, 1.2, 1.45, 1.6, 2.1, 2.7, 3.2].enumerated() {
             var c = StageConversation(duration: at + 10)
             c.activate(at: at)

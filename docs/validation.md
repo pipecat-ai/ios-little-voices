@@ -41,7 +41,7 @@ Build the Simulator Debug app and unsigned iPhone Debug and Release apps
 ## In the Simulator
 
 Launch a Debug build with an argument, for example
-`xcrun simctl launch --console-pty booted ai.pipecat.voice --verify-phonon`:
+`xcrun simctl launch --console-pty booted ai.pipecat.littlevoices --verify-phonon`:
 
 | Argument | Expect |
 | --- | --- |
@@ -50,7 +50,7 @@ Launch a Debug build with an argument, for example
 | `--verify-phonon` | `PHONON_PASS`, and speech in `Documents/phonon-check.wav` |
 | `--verify-phonon-playback` | `PHONON_VERIFIED: load, playback, cancellation, restart and continuous capture` |
 | `--verify-audience` | `AUDIENCE_VERIFIED`, the largest difference under 1e-4 |
-| `--preview-duo <scenario>`, for each of the eight | `DUO_PREVIEW_DONE: <scenario>, 0 issues` and `DUO_PREVIEW_RESTING: true`; screenshots at each `DUO_PREVIEW_STATE` moment look right |
+| `--preview-duo <scenario>`, for each of the ten | `DUO_PREVIEW_DONE: <scenario>, 0 issues` and `DUO_PREVIEW_RESTING: true`; screenshots at each `DUO_PREVIEW_STATE` moment look right |
 | `--demo-question "Should I skip the gym today?"` | An exchange plays and `DEMO_DONE` (the Mac needs Apple Intelligence) |
 | `--stage-script <name>`, `--stage-pose <pose>` | The stage as the script or pose describes it |
 
@@ -100,6 +100,9 @@ October 2026, Xcode 27 on an Apple silicon Mac, iPhone 18 Pro Simulator with iOS
   ("There are no underlying assets"). Run it again once Apple Intelligence is ready.
 - **Bundled Python:** every scripted run imports the same 559 modules; the bundle leaves out
   the rest, OpenSSL included.
-- **Lip sync:** across eight of Phonon's stock voices, vowels take their mouth shape 86% of the
-  time and the lips close on 99–100% of M, B and P (see [lip sync](architecture.md#lip-sync)).
+- **Lip sync:** with the aligner trained on eight of Gradium's voices, before the characters'
+  joined them, vowels took their mouth shape 86% of the time and the lips closed on 99–100% of
+  M, B and P across those voices (see [lip sync](architecture.md#lip-sync)). Retrained with the
+  characters' voices, it keeps its alignment through 19 of 20 test sentences in the angel's
+  voice and all 20 in the devil's.
 - **Not yet run:** anything on a physical iPhone.

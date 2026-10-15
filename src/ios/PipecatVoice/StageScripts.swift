@@ -509,8 +509,8 @@ extension StageScript {
             script.introduce(at: 0)
             return script
         case "intro-handover":
-            // A conversation starts mid-shove, as a scripted run's tap on the microphone may: the
-            // shove lets go and the conversation takes over.
+            // A conversation starts mid-shove, as a Shortcut may: the shove lets go and the
+            // conversation takes over.
             c = StageConversation(duration: 14)
             c.activate(at: 1.6)
             let final = c.ask("Should I go to the gym tonight?", at: 2.4, addressed: [.angel])
