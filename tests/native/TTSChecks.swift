@@ -16,7 +16,7 @@ struct TTSChecks {
 
     static func settings() throws {
         try check(VoiceSettings.engineTitle == "Gradium Phonon", "Wrong speech engine title")
-        try check(VoiceSettings.voices == ["en_gb_Freya", "en_gb_Reuben"], "Phonon must load the angel's voice, then the devil's")
+        try check(VoiceSettings.voices == ["Angel_F01", "Devil_01"], "Phonon must load the angel's voice, then the devil's")
     }
 
     static func cancellation() async throws {

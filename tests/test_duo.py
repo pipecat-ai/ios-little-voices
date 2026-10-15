@@ -238,10 +238,10 @@ async def test_a_debate_plays_in_turn_in_each_voice_and_then_the_floor_is_the_hu
         assert "The Devil just spoke to you" in generations[2]["prompt"]
         assert "final advice in one short sentence" in generations[3]["prompt"]
         assert [(s["speaker"], s["voice"], s["line"], s["text"]) for s in speeches] == [
-            ("angel", "en_gb_Freya", 0, script[0]),
-            ("devil", "en_gb_Reuben", 1, script[1]),
-            ("angel", "en_gb_Freya", 2, script[2]),
-            ("devil", "en_gb_Reuben", 3, script[3]),
+            ("angel", "Angel_F01", 0, script[0]),
+            ("devil", "Devil_01", 1, script[1]),
+            ("angel", "Angel_F01", 2, script[2]),
+            ("devil", "Devil_01", 3, script[3]),
         ]
         assert not any(event.get("state") == "listening" for event in host.events)
         marker = len(host.events)

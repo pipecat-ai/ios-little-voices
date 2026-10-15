@@ -48,10 +48,10 @@ def _card(cid: str, appearance: str) -> PersonCard:
 
 CAST = {
     "angel": Character(
-        "angel", "en_gb_Freya", _card("angel", "white robe, feathered wings and a golden halo")
+        "angel", "Angel_F01", _card("angel", "white robe, feathered wings and a golden halo")
     ),
     "devil": Character(
-        "devil", "en_gb_Reuben", _card("devil", "red skin, little horns and a pointy tail")
+        "devil", "Devil_01", _card("devil", "red skin, little horns and a pointy tail")
     ),
 }
 PLAYER_CARD = PersonCard(id=PLAYER, label="the human")

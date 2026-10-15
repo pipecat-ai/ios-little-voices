@@ -46,7 +46,7 @@ Launch a Debug build with an argument, for example
 | Argument | Expect |
 | --- | --- |
 | (none) | `PIPECAT_PYTHON_READY` |
-| `--verify-voice-settings` | `PHONON_SETTINGS: voices=en_gb_Freya,en_gb_Reuben` |
+| `--verify-voice-settings` | `PHONON_SETTINGS: voices=Angel_F01,Devil_01` |
 | `--verify-phonon` | `PHONON_PASS`, and speech in `Documents/phonon-check.wav` |
 | `--verify-phonon-playback` | `PHONON_VERIFIED: load, playback, cancellation, restart and continuous capture` |
 | `--verify-audience` | `AUDIENCE_VERIFIED`, the largest difference under 1e-4 |
@@ -78,7 +78,7 @@ None of these has been run against the current app yet:
 - [ ] `--benchmark-phonon`, built with `SWIFT_OPTIMIZATION_LEVEL=-O`, logs
       `PHONON_BENCHMARK_COMPLETE`.
 - [ ] A Release build ignores the debug launch arguments.
-- [ ] Settings: your name and contact, the voices (Freya and Reuben), the credits, and
+- [ ] Settings: your name and contact, the voices (Angel F01 and Devil 01), the credits, and
       "Hey Little Voices" with Vocal Shortcuts.
 - [ ] With the system in Dark Mode, the stage, the dock and Settings stay light.
 - [ ] Control Center screen recording captures the characters with its microphone off, and

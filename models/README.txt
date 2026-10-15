@@ -6,14 +6,9 @@ Setup requires:
   models/phonon/config.json
   models/phonon/model.q8.gguf
   models/phonon/tokenizer.json
-  models/phonon/voices/<name>.safetensors for the characters' voices,
-    en_gb_Freya and en_gb_Reuben, which ship with the checkpoint
-
-Voices must be made for the same checkpoint: the runtime rejects a voice whose
-model_ext differs from config.json's model_id. To give a character another voice,
-such as a custom one, put it in models/phonon/voices/ and name it in
-DuoCharacter.voice (Swift), CAST (src/python/mobile_app/duo.py) and PHONON_VOICES
-(scripts/phonon_package.py).
+The characters' voices, made for this checkpoint, are in the repository, in
+src/voices/; see src/voices/README.md. The checkpoint's own voices, in
+models/phonon/voices/, are optional: the lip-sync scripts train on several of them.
 
 Run setup:
   uv run --no-sync python scripts/setup.py
@@ -21,7 +16,7 @@ Run setup:
 Setup checks these files first and stops with a list of any that are missing,
 then builds native/phonon-ffi, which runs the checkpoint with Gradium's
 open-source ptts crate from crates.io. Xcode builds copy only config.json,
-model.q8.gguf, tokenizer.json and those two voices into the app.
+model.q8.gguf and tokenizer.json, with the characters' two voices, into the app.
 
 SpellSpeak Audience (https://huggingface.co/spellspeak/audience), release rc2.1,
 runs on Core ML. Convert it with spellspeak-models' converter, which fetches the

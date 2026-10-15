@@ -331,9 +331,15 @@ private struct SettingsView: View {
         }.tint(VoicePalette.blue)
     }
 
-    /// A Phonon voice's name as people say it: `en_gb_Freya` is Freya.
+    /// A Phonon voice's name as people say it: Gradium's are language_region_Name, so
+    /// `en_gb_Reuben` is Reuben; a custom voice such as `Angel_F01` is Angel F01.
     private static func voiceName(_ voice: String) -> String {
-        voice.split(separator: "_").last.map(String.init) ?? voice
+        let parts = voice.split(separator: "_")
+        if parts.count == 3, parts[0].count == 2, parts[1].count == 2,
+           parts[0].allSatisfy(\.isLowercase), parts[1].allSatisfy(\.isLowercase) {
+            return String(parts[2])
+        }
+        return parts.joined(separator: " ")
     }
 
     private func credit(_ name: String, detail: String, url: String) -> some View {

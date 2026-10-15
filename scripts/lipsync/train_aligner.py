@@ -20,7 +20,8 @@ import speech
 
 HERE = Path(__file__).resolve().parent
 OUTPUT = speech.ROOT / "src/ios/PipecatVoice/LipsyncAlignerModel.swift"
-VOICES = ["en_gb_Freya", "en_gb_Reuben", "en_us_Brooklyn", "en_us_Harper"]
+# The characters' voices (src/voices), then eight of Gradium's.
+VOICES = ["Angel_F01", "Devil_01", "en_gb_Freya", "en_gb_Reuben", "en_us_Brooklyn", "en_us_Harper"]
 VOICES += ["en_gb_Tilly", "en_gb_Toby", "en_us_Marlowe", "en_us_Russell"]
 ROUNDS = 8
 EMISSION_WEIGHT = 0.15  # against durations, as LipsyncAligner weighs them

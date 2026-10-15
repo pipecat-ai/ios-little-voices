@@ -29,11 +29,10 @@ The characters speak and understand English.
 
 Both go in `models/`, which Git ignores apart from [models/README.txt](models/README.txt).
 
-**Gradium Phonon.** The checkpoint and its voices are not in this repository: obtain them
-from [Gradium](https://gradium.ai) (currently `phonon-0e03182e.200`) and place them in
-`models/phonon/`: `config.json`, `model.q8.gguf`, `tokenizer.json`, and the characters' voices
-`voices/en_gb_Freya.safetensors` and `voices/en_gb_Reuben.safetensors`, which ship with it. A
-script to download them will follow.
+**Gradium Phonon.** The checkpoint is not in this repository: obtain it from
+[Gradium](https://gradium.ai) (currently `phonon-0e03182e.200`) and place `config.json`,
+`model.q8.gguf` and `tokenizer.json` in `models/phonon/`. A script to download it will follow.
+The characters' voices, made for that checkpoint, are in [src/voices](src/voices).
 
 **SpellSpeak Audience.** Convert release rc2.1 to Core ML with the converter in
 [spellspeak-models](https://github.com/spellspeak/models), which fetches the release:
@@ -44,7 +43,7 @@ uv run convert.py --out /path/to/little-voices/models/audience
 ```
 
 **Other voices.** Any voice made for the same Phonon checkpoint can speak for a character: put
-it in `models/phonon/voices/` and name it in `DuoCharacter.voice` (Swift), `CAST` in
+it in `src/voices/` and name it in `DuoCharacter.voice` (Swift), `CAST` in
 `src/python/mobile_app/duo.py` and `PHONON_VOICES` in `scripts/phonon_package.py`.
 
 ## Set up

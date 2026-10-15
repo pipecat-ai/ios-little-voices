@@ -274,9 +274,7 @@ class TwoVoices(AppleFoundationLLMService):
     """Answer each turn with two responses; the first continues to the second."""
 
     async def respond(self, context: LLMContext, turn: str) -> None:
-        for line, (speaker, voice) in enumerate(
-            [("angel", "en_gb_Freya"), ("devil", "en_gb_Reuben")]
-        ):
+        for line, (speaker, voice) in enumerate([("angel", "Angel_F01"), ("devil", "Devil_01")]):
 
             async def finish(text: str, last: bool = line == 1) -> dict[str, Any]:
                 return {"continues": not last}
@@ -312,10 +310,10 @@ async def test_one_turn_speaks_several_responses_each_in_its_own_voice():
         if request["operation"] == "speak"
     ]
     assert speeches == [
-        ("angel", "en_gb_Freya", 0, "First sentence."),
-        ("angel", "en_gb_Freya", 0, "Second sentence."),
-        ("devil", "en_gb_Reuben", 1, "First sentence."),
-        ("devil", "en_gb_Reuben", 1, "Second sentence."),
+        ("angel", "Angel_F01", 0, "First sentence."),
+        ("angel", "Angel_F01", 0, "Second sentence."),
+        ("devil", "Devil_01", 1, "First sentence."),
+        ("devil", "Devil_01", 1, "Second sentence."),
     ]
     ends = [frame for frame in down if isinstance(frame, LLMFullResponseEndFrame)]
     assert [frame.metadata["continues"] for frame in ends] == [True, False]

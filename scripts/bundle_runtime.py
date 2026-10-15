@@ -17,7 +17,7 @@ from pathlib import Path
 
 from audience_package import bundle_audience
 from build_native import TARGETS
-from phonon_package import PHONON_FILES, validate_phonon
+from phonon_package import PHONON_FILES, validate_phonon, voice_files
 from pipecat_package import DIST_INFO, validate_pipecat
 from stage_python import DISTRIBUTIONS
 
@@ -200,14 +200,16 @@ def pipecat_modules(app: Path, pipecat: Path) -> set[Path]:
 
 
 def bundle_models(bundle: Path, *, root: Path = ROOT) -> None:
-    """Copy the Phonon checkpoint with only the cast's voices."""
+    """Copy the Phonon checkpoint with only the cast's voices, from src/voices."""
     validate_phonon(root)
     target = bundle / "phonon"
     if target.exists():
         shutil.rmtree(target)
+    (target / "voices").mkdir(parents=True)
     for name in PHONON_FILES:
-        (target / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / "models/phonon" / name, target / name)
+    for voice in voice_files(root):
+        shutil.copy2(voice, target / "voices" / voice.name)
 
 
 def main():

@@ -122,7 +122,7 @@ async def check_native_turn():
         for sentence in ['Hello there.', 'Nice to meet you.']:
             speak = await wait(lambda e: e.get('operation') == 'speak')
             assert speak['text'] == sentence
-            assert (speak['speaker'], speak['voice']) == ('angel', 'en_gb_Freya'), speak
+            assert (speak['speaker'], speak['voice']) == ('angel', 'Angel_F01'), speak
             await bridge.receive({'type': 'playback', 'request': speak['request'],
                                   'speaking': True, 'session': 'mobile-imports'})
             await bridge.receive({'type': 'playback', 'request': speak['request'],

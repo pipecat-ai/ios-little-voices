@@ -7,5 +7,5 @@ enum DuoCharacter: String, CaseIterable, Identifiable, Sendable {
 
     var id: Self { self }
     var title: String { self == .angel ? "Angel" : "Devil" }
-    var voice: String { self == .angel ? "en_gb_Freya" : "en_gb_Reuben" }
+    var voice: String { self == .angel ? "Angel_F01" : "Devil_01" }
 }

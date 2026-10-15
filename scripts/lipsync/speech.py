@@ -1,11 +1,13 @@
 """Phonon speech for the lip-sync scripts, measured exactly as the app measures it: Speech.swift is
 compiled with the app's own lip-sync sources and drives a build of the app's phonon-ffi for this
-Mac. Needs Xcode, a Rust toolchain and the Phonon checkpoint in models/phonon.
+Mac. Needs Xcode, a Rust toolchain and the Phonon checkpoint in models/phonon; it speaks in
+Gradium's voices there and in the characters' voices in src/voices.
 """
 
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from array import array
@@ -15,6 +17,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 CHECKPOINT = ROOT / "models/phonon"
+VOICES = ROOT / "src/voices"
 LEXICON = ROOT / "src/ios/PipecatVoice/Assets.xcassets/Pronunciations.dataset/cmudict.lzma"
 BUILD = ROOT / ".build/lipsync"
 RUST = ROOT / ".build/rust"
@@ -57,9 +60,25 @@ def tool() -> Path:
     return binary
 
 
+@cache
+def checkpoint() -> Path:
+    """The checkpoint with every voice: models/phonon's files and Gradium's voices, and the
+    characters' voices from src/voices, linked into one folder as the runtime expects."""
+    view = BUILD / "checkpoint"
+    shutil.rmtree(view, ignore_errors=True)
+    (view / "voices").mkdir(parents=True)
+    for name in ("config.json", "model.q8.gguf", "tokenizer.json"):
+        (view / name).symlink_to(CHECKPOINT / name)
+    for voice in [*(CHECKPOINT / "voices").glob("*.safetensors"), *VOICES.glob("*.safetensors")]:
+        link = view / "voices" / voice.name
+        link.unlink(missing_ok=True)
+        link.symlink_to(voice)
+    return view
+
+
 def pcm(voice: str, text: str) -> array:
     """`text` spoken in `voice`: 24 kHz mono float samples."""
-    command = [tool(), "pcm", CHECKPOINT, voice, text]
+    command = [tool(), "pcm", checkpoint(), voice, text]
     samples = array("f")
     samples.frombytes(subprocess.run(command, stdout=subprocess.PIPE, check=True).stdout)
     return samples
@@ -68,5 +87,5 @@ def pcm(voice: str, text: str) -> array:
 def features(voice: str, sentences: list[str]) -> list[dict]:
     """For each sentence spoken in `voice`: its words (`phones`, `pause`) and `hops`, each hop's
     level, zero-crossing rate and cepstra c1…c12 as LipsyncAlignerFeatures measures them."""
-    command = [tool(), "features", CHECKPOINT, LEXICON, voice, *sentences]
+    command = [tool(), "features", checkpoint(), LEXICON, voice, *sentences]
     return json.loads(subprocess.run(command, stdout=subprocess.PIPE, check=True).stdout)

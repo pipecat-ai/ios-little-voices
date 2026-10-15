@@ -15,7 +15,7 @@ Swift's `PhononSynthesizer` runs the bundled checkpoint through `native/phonon-f
 Rust library around Gradium's open-source `ptts` runtime (0.4.0-rc.1):
 
 - `prepare(voices:)` loads the model with every voice of the cast (`VoiceSettings.voices`: the
-  angel's `en_gb_Freya`, then the devil's `en_gb_Reuben`); `phonon_speak` takes the index of a
+  angel's `Angel_F01`, then the devil's `Devil_01`, from `src/voices`); `phonon_speak` takes the index of a
   request's voice, so the voice changes per sentence without reloading.
 - `synthesize(_:voice:)` streams mono Float32 at 24 kHz; each `SpeechSynthesis` request owns
   its stream, cancellation and completion.
@@ -49,9 +49,9 @@ next PCM chunk. Phonon makes no network requests.
 
 ## Bundled assets
 
-`models/phonon/` holds the checkpoint from Gradium (currently `phonon-0e03182e.200`), checked
-by `scripts/phonon_package.py`. App builds bundle only what the runtime reads and the cast's
-voices (`PHONON_VOICES`):
+`models/phonon/` holds the checkpoint from Gradium (currently `phonon-0e03182e.200`), and
+`src/voices/` the cast's voices, both checked by `scripts/phonon_package.py`. App builds bundle
+only what the runtime reads, with the cast's voices (`PHONON_VOICES`):
 
 ```text
 phonon/
@@ -59,8 +59,8 @@ phonon/
   model.q8.gguf
   tokenizer.json
   voices/
-    en_gb_Freya.safetensors
-    en_gb_Reuben.safetensors
+    Angel_F01.safetensors
+    Devil_01.safetensors
 ```
 
 `ptts` rejects a voice stamped for another checkpoint. Nothing is downloaded at runtime.
@@ -71,7 +71,7 @@ Debug builds accept these launch arguments; Release builds compile none of them 
 
 **Native services**
 
-- `--verify-voice-settings`: `PHONON_SETTINGS: voices=en_gb_Freya,en_gb_Reuben`.
+- `--verify-voice-settings`: `PHONON_SETTINGS: voices=Angel_F01,Devil_01`.
 - `--verify-phonon`: synthesizes a fixed sentence without the audio session, writes
   `Documents/phonon-check.wav`, and logs `PHONON_PREPARED`, `PHONON_FIRST_PCM`,
   `PHONON_SYNTHESIZED` and `PHONON_PASS: microphone=off, playback=not_tested`, or

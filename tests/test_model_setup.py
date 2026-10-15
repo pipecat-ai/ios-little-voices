@@ -17,6 +17,9 @@ def phonon_files(root):
         path = root / "models/phonon" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"phonon fixture")
+    for path in phonon_package.voice_files(root):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"voice fixture")
 
 
 def audience_files(root, release="rc2.1"):
@@ -59,6 +62,7 @@ def test_audience_package_is_validated_and_compiled_once(tmp_path, monkeypatch):
 
 def test_setup_requires_and_bundles_the_voices_the_cast_speaks_in():
     assert phonon_package.PHONON_VOICES == tuple(character.voice for character in CAST.values())
+    assert all(path.is_file() for path in phonon_package.voice_files())
 
 
 def test_packaging_requires_phonon_and_copies_only_model_assets(tmp_path):
@@ -73,6 +77,7 @@ def test_packaging_requires_phonon_and_copies_only_model_assets(tmp_path):
         "default-voice.safetensors",
         "tokenizer.model",
     ]:
+        (package / extra).parent.mkdir(parents=True, exist_ok=True)
         (package / extra).write_bytes(b"not bundled")
     (bundle / "phonon").mkdir(parents=True)
     (bundle / "phonon/stale.bin").write_bytes(b"stale")
@@ -86,8 +91,8 @@ def test_packaging_requires_phonon_and_copies_only_model_assets(tmp_path):
         "config.json",
         "model.q8.gguf",
         "tokenizer.json",
-        "voices/en_gb_Freya.safetensors",
-        "voices/en_gb_Reuben.safetensors",
+        "voices/Angel_F01.safetensors",
+        "voices/Devil_01.safetensors",
     ]
 
 
