@@ -31,6 +31,9 @@ final class AppleSpeechRecognizer {
     private var finalizationTask: Task<Void, Error>?
     private var epoch = UUID()
     private let logger = Logger(subsystem: "ai.pipecat.voice", category: "Speech")
+    /// The speech model lingers after an analyzer finishes, so the next one, for the next turn
+    /// or conversation, starts without loading it.
+    private static let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .lingering)
     var onTranscript: ((String, Bool, Double, Double) -> Void)?
     var onVAD: ((Double, Double, Double) -> Void)?
     var onLevel: ((Double) -> Void)?
@@ -39,6 +42,20 @@ final class AppleSpeechRecognizer {
     init(audio: VoiceAudioEngine) { self.audio = audio }
 
     func logAudioMetrics(stage: String) { capture?.logMetrics(stage: stage) }
+
+    /// Load the speech model ahead of `start`, without the microphone. Assets not yet installed
+    /// download when a conversation starts.
+    func prepare() async {
+        guard SpeechTranscriber.isAvailable,
+              let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "en-US")) else { return }
+        let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+        guard await AssetInventory.status(forModules: [transcriber]) == .installed,
+              let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else { return }
+        let analyzer = SpeechAnalyzer(modules: [transcriber], options: Self.options)
+        do { try await analyzer.prepareToAnalyze(in: format) }
+        catch { logger.error("Speech model failed to load: \(error.localizedDescription, privacy: .public)") }
+        await analyzer.cancelAndFinishNow()
+    }
 
     /// Start recognizing on a fresh input generation: callbacks from an earlier one are dropped.
     func start() async throws {
@@ -112,8 +129,7 @@ final class AppleSpeechRecognizer {
 
     private func makeSession(transcriber: SpeechTranscriber, format: AVAudioFormat,
                              generation: UUID) async throws -> RecognitionSession {
-        let analyzer = SpeechAnalyzer(modules: [transcriber],
-            options: .init(priority: .userInitiated, modelRetention: .whileInUse))
+        let analyzer = SpeechAnalyzer(modules: [transcriber], options: Self.options)
         try await analyzer.prepareToAnalyze(in: format)
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream(
             bufferingPolicy: .bufferingNewest(SpeechAudioInput.asrBufferCapacity))

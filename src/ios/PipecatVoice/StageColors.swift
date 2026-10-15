@@ -176,9 +176,11 @@ struct StageColors: Equatable, Sendable {
     var chromeGlyph: PerCharacter<RGBA>
     /// The dock's round side buttons, a lighter soft glass inside the dock.
     var dockButton: RGBA
-    /// The microphone button, top to bottom, deepening toward the bottom: teal-green, red while muted.
+    /// The microphone button, top to bottom, deepening toward the bottom: teal-green, red while
+    /// muted, and a warm gray while it loads.
     var micFill: [GradientStop]
     var micMutedFill: [GradientStop]
+    var micLoadingFill: [GradientStop]
     /// The soft light around the microphone button: its halo and the rings rippling from it.
     var micGlow: RGBA
     /// Multiplies ink stroke widths.
@@ -249,6 +251,7 @@ struct StageColors: Equatable, Sendable {
         dockButton: RGBA(0xFFE0C4, alpha: 0.38),
         micFill: [GradientStop(0, RGBA(0x36C7A0)), GradientStop(0.5, RGBA(0x19A383)), GradientStop(1, RGBA(0x0B7A62))],
         micMutedFill: [GradientStop(0, RGBA(0xF26A5F)), GradientStop(0.55, RGBA(0xDB4A48)), GradientStop(1, RGBA(0xB22C35))],
+        micLoadingFill: [GradientStop(0, RGBA(0xACA298)), GradientStop(0.5, RGBA(0x8E867E)), GradientStop(1, RGBA(0x6B645D))],
         // Warm light, so the rings glow over the red-orange.
         micGlow: RGBA(0xFFB86A, alpha: 0.45),
         inkStrokeScale: 1,
@@ -312,6 +315,7 @@ struct StageColors: Equatable, Sendable {
         dockButton: RGBA(0xB0582C, alpha: 0.45),
         micFill: [GradientStop(0, RGBA(0x2BB492)), GradientStop(0.55, RGBA(0x1A977A)), GradientStop(1, RGBA(0x0B6E5A))],
         micMutedFill: [GradientStop(0, RGBA(0xDA5850)), GradientStop(0.55, RGBA(0xBF3E3F)), GradientStop(1, RGBA(0x962530))],
+        micLoadingFill: [GradientStop(0, RGBA(0x968D84)), GradientStop(0.55, RGBA(0x7A726A)), GradientStop(1, RGBA(0x58514B))],
         micGlow: RGBA(0xFFD9B0, alpha: 0.24),
         inkStrokeScale: 1,
         seamLine: nil,

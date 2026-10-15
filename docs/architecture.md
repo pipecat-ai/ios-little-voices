@@ -25,6 +25,12 @@ Python polls a thread-safe inbox, and its events reach Swift on the main queue. 
 its asyncio loop; SwiftUI runs on the main actor. There is no socket, subprocess or web
 server, and no code is downloaded.
 
+As the app comes to the front, `ConversationModel` loads Phonon's voices, Audience and the
+speech model alongside Python, so a conversation starts without waiting for them; until they
+and Python are ready the microphone is gray, with a spinner. The voices and Audience stay
+loaded between conversations and are freed in the background; the speech model lingers after
+each use.
+
 `src/python/mobile_app/bot.py` configures the services, VAD, context and observer and returns
 a `PipelineWorker`, which the embedded entry point runs with a `WorkerRunner`:
 
@@ -260,12 +266,13 @@ the angel and peach for the devil, with one soft point toward its speaker.
 - **The human:** their words, live or final, float in a pill over the seam until a
   character's first line plays.
 - **Chrome:** Settings and New conversation sit in the top corners. Before a conversation
-  the teal microphone stands alone above the home indicator; during one, the dock's glass
-  widens around it and the input picker and End slide out from behind it. Its rings show only
-  while the human speaks. An error rises in a banner above the dock. The header's buttons, the
-  dock, bubbles, capsules, pill and banner share one glass (`SoftGlass`): a warm tint graded
-  lighter at the top, a soft light along its upper edge and, where it floats, a soft shadow.
-  It is solid under Reduce Transparency and outlined under Increase Contrast.
+  the microphone stands alone above the home indicator, gray with a spinner while the app
+  loads, then teal; during one, the dock's glass widens around it and the input picker and End
+  slide out from behind it. Its rings show only while the human speaks. An error rises in a
+  banner above the dock. The header's buttons, the dock, bubbles, capsules, pill and banner
+  share one glass (`SoftGlass`): a warm tint graded lighter at the top, a soft light along its
+  upper edge and, where it floats, a soft shadow. It is solid under Reduce Transparency and
+  outlined under Increase Contrast.
 - **New conversation:** the conversation clears at once, and a snapshot of the old screen is
   wiped away from the top behind a glowing edge that waves like the seam (`ResetWipe`), or
   fades under Reduce Motion. Core Animation runs it, so it keeps its pace while the

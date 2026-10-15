@@ -210,6 +210,16 @@ final class AudienceRunner: @unchecked Sendable {
         try await run { _ in }
     }
 
+    /// Free the model; the next request loads it again.
+    func unload() async {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                model = nil
+                continuation.resume()
+            }
+        }
+    }
+
     func answer(cards: [String], line: String, current: Int, people: [[Float]],
                 features: [Float]) async throws -> AudienceModel.Answer {
         try await run { try $0.answer(cards: cards, line: line, current: current, people: people, features: features) }

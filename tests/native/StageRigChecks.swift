@@ -659,9 +659,9 @@ enum StageRigChecks {
                     }
                 }
             }
-            // White on the microphone, muted or not, from its middle down, where the glyph's
+            // White on the microphone, in every state, from its middle down, where the glyph's
             // body sits (a 3:1 icon; the lighter top edge is 2.5:1).
-            for fill in [colors.micFill, colors.micMutedFill] {
+            for fill in [colors.micFill, colors.micMutedFill, colors.micLoadingFill] {
                 for position in stride(from: 0.5, through: 1, by: 0.1) {
                     let ratio = StageColors.contrast(RGBA(0xFFFFFF), StageColors.sample(fill, at: position))
                     check(ratio >= 3, "\(name) microphone glyph contrast \(ratio) at \(position)")

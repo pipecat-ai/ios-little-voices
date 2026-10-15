@@ -13,9 +13,9 @@ struct PipecatVoiceApp: App {
             root
                 .preferredColorScheme(darkMode ? .dark : .light)
                 .onChange(of: scenePhase, initial: true) { previous, phase in
-                    if phase == .background, previous != phase { model.stop() }
+                    if phase == .background, previous != phase { model.enterBackground() }
                     if phase == .active {
-                        model.refreshAvailability()
+                        model.becomeActive()
                         startRequestedConversation()
                     }
                 }

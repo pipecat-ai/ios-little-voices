@@ -91,7 +91,7 @@ xcrun simctl launch --console-pty booted ai.pipecat.voice --preview-duo barge-in
 
 | Argument | What it does |
 | --- | --- |
-| `--preview-duo [scenario]` | Plays a scripted conversation through the whole app, with stand-ins for the microphone and the language model, and flags anything the screen should never show: `gym` (the default), `barge-in`, `new-conversation`, `mute`, `long-and-short`, `markup`, `error`, `debate`. |
+| `--preview-duo [scenario]` | Plays a scripted conversation through the whole app, with stand-ins for the microphone and the language model, and flags anything the screen should never show: `gym` (the default), `barge-in`, `new-conversation`, `background`, `mute`, `long-and-short`, `markup`, `error`, `debate`. |
 | `--record-audio`, `--preview-buffered` | With `--preview-duo`: record what plays; synthesize each sentence in full before it plays. |
 | `--demo-question "…"` | Asks the live language model a question for you and records what plays. |
 | `--verify-phonon`, `--verify-phonon-playback` | Check Phonon synthesis, and playback, cancellation and restart. |

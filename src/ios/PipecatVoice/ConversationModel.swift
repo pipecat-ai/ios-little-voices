@@ -60,6 +60,8 @@ protocol SpeechInput: AnyObject {
     var onVAD: ((Double, Double, Double) -> Void)? { get set }
     var onLevel: ((Double) -> Void)? { get set }
     var onError: ((String) -> Void)? { get set }
+    /// Load the recognizer's model ahead of `start`, without the microphone.
+    func prepare() async
     /// Start listening on a fresh clock.
     func start() async throws
     func stop() async
@@ -94,6 +96,10 @@ final class ConversationModel {
     private(set) var muted = false
     /// Setting up audio, speech and models: as a conversation starts, and after an audio route change.
     private(set) var preparing = false
+    /// Loading the voices, Audience and speech recognition as the app opens or returns.
+    private var warming = false
+    /// Python or the models are loading, which a conversation waits for.
+    var loading: Bool { !ready || warming }
     private(set) var userLevel = 0.0
     /// `userLevel` without observation, for the stage's per-frame sampling.
     var unobservedUserLevel: Double { _userLevel }
@@ -151,7 +157,7 @@ final class ConversationModel {
     private let runtime = PCPythonRuntime()
     private let audio: VoiceAudioEngine
     private let speech: SpeechInput
-    private var synthesizer: PhononSynthesizer?
+    private let synthesizer = PhononSynthesizer()
     private let player: PCMPlayer
     private let audience = AudienceRunner()
     private let languageModel: TextGenerator
@@ -168,6 +174,10 @@ final class ConversationModel {
     private var sessionTask: Task<Void, Never>?
     private var captureTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
+    /// The voices, Audience and speech recognition loading, or loaded, for conversations to come.
+    private var warmup: Task<Void, Error>?
+    /// Freeing the voices and Audience in the background; the next load waits for it.
+    private var cooldown: Task<Void, Never>?
     private var sessionGeneration = UUID()
     private var captureGeneration = UUID()
     private var inputReady = false
@@ -193,6 +203,8 @@ final class ConversationModel {
     /// A scripted run (`--preview-duo`, `--demo-question`), standing in for the microphone and,
     /// in a preview, the language model.
     private let script: ConversationScript?
+    /// A launch check is timing models it loads itself, so the app loads none alongside.
+    private var checking = false
     #endif
 
     init() {
@@ -292,9 +304,66 @@ final class ConversationModel {
 
     // MARK: - The session
 
-    /// Check again whether the language model can be used, as the app comes to the foreground.
-    func refreshAvailability() {
+    /// The app is in front: check the language model again, and load the voices, Audience and
+    /// speech recognition, so the microphone needn't wait for them.
+    func becomeActive() {
+        refreshAvailability()
+        #if DEBUG
+        if checking { return }
+        #endif
+        loadModels()
+    }
+
+    /// The app has gone to the background: the conversation ends, and the voices and Audience are
+    /// freed until it returns.
+    func enterBackground() {
+        stop()
+        guard let warmup else { return }
+        self.warmup = nil
+        warming = false
+        cooldown = Task {
+            _ = await warmup.result
+            await synthesizer.unload()
+            await audience.unload()
+        }
+    }
+
+    /// Check again whether the language model can be used.
+    private func refreshAvailability() {
         availability = languageModel.unavailableReason
+    }
+
+    /// The voices, Audience and speech recognition, loading or loaded. Only Phonon failing fails
+    /// the load, which the next conversation tries again.
+    @discardableResult
+    private func loadModels() -> Task<Void, Error> {
+        if let warmup { return warmup }
+        warming = true
+        let cooldown = cooldown
+        let task = Task {
+            await cooldown?.value
+            async let voices: Void = synthesizer.prepare(voices: VoiceSettings.voices)
+            async let audienceReady: Void = audience.prepare()
+            await speech.prepare()
+            do { try await audienceReady }
+            catch {
+                // Without the model, Python reads who each line is for with SpellSpeak's rules baseline.
+                logger.error("SpellSpeak Audience failed to load: \(error.localizedDescription, privacy: .public)")
+            }
+            do { try await voices }
+            catch {
+                logger.error("Phonon failed to load: \(error.localizedDescription, privacy: .public)")
+                throw error
+            }
+        }
+        warmup = task
+        Task {
+            let result = await task.result
+            guard warmup == task else { return }
+            warming = false
+            if case .failure = result { warmup = nil }
+        }
+        return task
     }
 
     func start() {
@@ -318,21 +387,10 @@ final class ConversationModel {
                 try Task.checkCancellation()
                 guard active, sessionGeneration == generation else { return }
                 try audio.configureSession()
-                let synthesizer = PhononSynthesizer()
-                self.synthesizer = synthesizer
-                // Audience is first needed when the human finishes speaking: load it meanwhile.
-                async let audienceReady: Void = audience.prepare()
-                do { try await synthesizer.prepare(voices: VoiceSettings.voices) }
-                catch is CancellationError { throw CancellationError() }
+                do { try await loadModels().value }
                 catch {
-                    logger.error("Phonon failed to load: \(error.localizedDescription, privacy: .public)")
                     throw VoiceError(message: "The angel’s and the devil’s voices couldn’t load. Close other apps "
                         + "and try again; if it keeps happening, reinstall Little Voices.")
-                }
-                do { try await audienceReady }
-                catch {
-                    // Without the model, Python reads who each line is for with SpellSpeak's rules baseline.
-                    logger.error("SpellSpeak Audience failed to load: \(error.localizedDescription, privacy: .public)")
                 }
                 try Task.checkCancellation()
                 guard active, sessionGeneration == generation else { return }
@@ -411,8 +469,6 @@ final class ConversationModel {
         sessionTask?.cancel()
         let previousPreparation = sessionTask
         sessionTask = nil
-        let previousSynthesizer = synthesizer
-        synthesizer = nil
         captureTask?.cancel()
         let previousCapture = captureTask
         captureTask = nil
@@ -425,7 +481,6 @@ final class ConversationModel {
             await speech.stop()
             audio.stop()
             await previousPreparation?.value
-            await previousSynthesizer?.unload()
         }
     }
 
@@ -776,7 +831,6 @@ final class ConversationModel {
 
     /// Speak a sentence in its character's voice, through to the end of its playback.
     private func speak(_ event: NativeEvent, request: String, generation: UUID) async throws {
-        guard let synthesizer else { throw VoiceError(message: "Phonon is not ready.") }
         let turn = event.turn
         speechRequest = request
         speech.logAudioMetrics(stage: "synthesis_start")
@@ -860,6 +914,7 @@ extension ConversationModel {
             ("--verify-audience", { [weak self] in await self?.verifyAudience() }),
         ]
         for check in checks where arguments.contains(check.flag) {
+            checking = true
             Task { await check.run() }
         }
         if let script { Task { await script.run(self) } }
