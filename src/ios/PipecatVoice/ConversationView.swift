@@ -294,11 +294,10 @@ private struct SettingsView: View {
                     Text("Conversations stay in memory and clear when the app closes. Apple Intelligence must be enabled. Apple speech assets may download on first use.")
                 }
                 Section("Credits") {
+                    credit("Pipecat", detail: "Conversation by Pipecat, Daily’s open-source framework for voice AI.",
+                           url: "https://pipecat.ai")
                     credit("Gradium", detail: "Speech by Phonon, Gradium’s on-device text-to-speech model.",
                            url: "https://gradium.ai")
-                    credit("SpellSpeak Audience",
-                           detail: "Turn-taking by Audience, an on-device model that reads who each line is for.",
-                           url: "https://huggingface.co/spellspeak/audience")
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
             }.navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
