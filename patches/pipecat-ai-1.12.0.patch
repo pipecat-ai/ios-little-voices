@@ -1,0 +1,612 @@
+--- a/pipecat/audio/utils.py
++++ b/pipecat/audio/utils.py
+@@ -11,16 +11,10 @@
+ various audio formats used in Pipecat pipelines.
+ """
+ 
+-import audioop
+ import io
+ import wave
+ 
+-import loudness
+-import numpy as np
+-
+ from pipecat.audio.resamplers.base_audio_resampler import BaseAudioResampler
+-from pipecat.audio.resamplers.soxr_resampler import SOXRAudioResampler
+-from pipecat.audio.resamplers.soxr_stream_resampler import SOXRStreamAudioResampler
+ 
+ # Normal speech usually results in many samples between ±500 to ±5000, depending on loudness and mic gain.
+ # So we are using a threshold that is well below what real speech produces.
+@@ -36,6 +30,8 @@
+     Returns:
+         A configured SOXRAudioResampler instance.
+     """
++    from pipecat.audio.resamplers.soxr_resampler import SOXRAudioResampler
++
+     return SOXRAudioResampler(**kwargs)
+ 
+ 
+@@ -48,6 +44,8 @@
+     Returns:
+         A configured SOXRStreamAudioResampler instance.
+     """
++    from pipecat.audio.resamplers.soxr_stream_resampler import SOXRStreamAudioResampler
++
+     return SOXRStreamAudioResampler(**kwargs)
+ 
+ 
+@@ -65,6 +63,8 @@
+     Returns:
+         Mixed audio data as raw bytes with samples clipped to 16-bit range.
+     """
++    import numpy as np
++
+     data1 = np.frombuffer(audio1, dtype=np.int16)
+     data2 = np.frombuffer(audio2, dtype=np.int16)
+ 
+@@ -96,6 +96,8 @@
+     Returns:
+         Interleaved stereo audio data as raw bytes.
+     """
++    import numpy as np
++
+     left = np.frombuffer(left_audio, dtype=np.int16)
+     right = np.frombuffer(right_audio, dtype=np.int16)
+ 
+@@ -175,6 +177,9 @@
+     Raises:
+         ValueError: If the audio is shorter than a gating block.
+     """
++    import loudness
++    import numpy as np
++
+     audio_np = np.frombuffer(audio, dtype=np.int16)
+     audio_float = audio_np.astype(np.float32) / 32768.0
+ 
+@@ -220,6 +225,8 @@
+     Returns:
+         PCM audio data as raw bytes at the specified output rate.
+     """
++    import audioop
++
+     # Convert μ-law to PCM
+     in_pcm_bytes = audioop.ulaw2lin(ulaw_bytes, 2)
+ 
+@@ -241,6 +248,8 @@
+     Returns:
+         μ-law encoded audio data as raw bytes at the specified output rate.
+     """
++    import audioop
++
+     # Resample
+     in_pcm_bytes = await resampler.resample(pcm_bytes, in_rate, out_rate)
+ 
+@@ -264,6 +273,8 @@
+     Returns:
+         PCM audio data as raw bytes at the specified output rate.
+     """
++    import audioop
++
+     # Convert a-law to PCM
+     in_pcm_bytes = audioop.alaw2lin(alaw_bytes, 2)
+ 
+@@ -285,6 +296,8 @@
+     Returns:
+         A-law encoded audio data as raw bytes at the specified output rate.
+     """
++    import audioop
++
+     # Resample
+     in_pcm_bytes = await resampler.resample(pcm_bytes, in_rate, out_rate)
+ 
+@@ -314,6 +327,8 @@
+         (SPEAKING_THRESHOLD) is set well below typical speech levels to
+         reliably detect silence vs. speech.
+     """
++    import numpy as np
++
+     # Convert raw audio bytes to a NumPy array of int16 samples
+     audio_data = np.frombuffer(pcm_bytes, dtype=np.int16)
+ 
+@@ -365,6 +380,8 @@
+         The per-channel sample index of speech onset, or None if no sustained
+         onset is present yet.
+     """
++    import numpy as np
++
+     if sample_rate <= 0:
+         return None
+ 
+--- a/pipecat/audio/vad/vad_analyzer.py
++++ b/pipecat/audio/vad/vad_analyzer.py
+@@ -208,29 +208,37 @@
+             volume = self._get_smoothed_volume(audio_frames)
+             self._prev_volume = volume
+ 
+-            speaking = confidence >= self._params.confidence and volume >= self._params.min_volume
++            self._update_vad_state(confidence, volume)
+ 
+-            if speaking:
+-                match self._vad_state:
+-                    case VADState.QUIET:
+-                        self._vad_state = VADState.STARTING
+-                        self._vad_starting_count = 1
+-                    case VADState.STARTING:
+-                        self._vad_starting_count += 1
+-                    case VADState.STOPPING:
+-                        self._vad_state = VADState.SPEAKING
+-                        self._vad_stopping_count = 0
+-            else:
+-                match self._vad_state:
+-                    case VADState.STARTING:
+-                        self._vad_state = VADState.QUIET
+-                        self._vad_starting_count = 0
+-                    case VADState.SPEAKING:
+-                        self._vad_state = VADState.STOPPING
+-                        self._vad_stopping_count = 1
+-                    case VADState.STOPPING:
+-                        self._vad_stopping_count += 1
++        return self._finalize_vad_state()
++
++    def _update_vad_state(self, confidence: float, volume: float) -> None:
++        """Advance the debounce counters by one confidence/volume observation."""
++        speaking = confidence >= self._params.confidence and volume >= self._params.min_volume
+ 
++        if speaking:
++            match self._vad_state:
++                case VADState.QUIET:
++                    self._vad_state = VADState.STARTING
++                    self._vad_starting_count = 1
++                case VADState.STARTING:
++                    self._vad_starting_count += 1
++                case VADState.STOPPING:
++                    self._vad_state = VADState.SPEAKING
++                    self._vad_stopping_count = 0
++        else:
++            match self._vad_state:
++                case VADState.STARTING:
++                    self._vad_state = VADState.QUIET
++                    self._vad_starting_count = 0
++                case VADState.SPEAKING:
++                    self._vad_state = VADState.STOPPING
++                    self._vad_stopping_count = 1
++                case VADState.STOPPING:
++                    self._vad_stopping_count += 1
++
++    def _finalize_vad_state(self) -> VADState:
++        """Confirm pending transitions after an observation or an audio batch."""
+         if (
+             self._vad_state == VADState.STARTING
+             and self._vad_starting_count >= self._vad_start_frames
+--- a/pipecat/processors/aggregators/llm_context.py
++++ b/pipecat/processors/aggregators/llm_context.py
+@@ -23,7 +23,6 @@
+ from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, overload
+ 
+ from loguru import logger
+-from PIL import Image
+ 
+ from pipecat.adapters.schemas.direct_function import DirectFunction
+ from pipecat.adapters.schemas.function_schema import FunctionSchema
+@@ -160,6 +159,8 @@
+                 bytes = image
+             else:
+                 # Encode to JPEG
++                from PIL import Image
++
+                 buffer = io.BytesIO()
+                 Image.frombytes(format, size, image).save(buffer, format="JPEG")
+                 bytes = buffer.getvalue()
+--- a/pipecat/processors/aggregators/llm_text_processor.py
++++ b/pipecat/processors/aggregators/llm_text_processor.py
+@@ -65,10 +65,10 @@
+         elif isinstance(frame, LLMTextFrame):
+             await self._handle_llm_text(frame)
+         elif isinstance(frame, LLMFullResponseEndFrame):
+-            await self._handle_llm_end(frame.skip_tts)
++            await self._handle_llm_end(frame.skip_tts, metadata=frame.metadata)
+             await self.push_frame(frame, direction)
+         elif isinstance(frame, EndFrame):
+-            await self._handle_llm_end()
++            await self._handle_llm_end(metadata=frame.metadata)
+             await self.push_frame(frame, direction)
+         else:
+             await self.push_frame(frame, direction)
+@@ -92,9 +92,10 @@
+             )
+             out_frame.append_to_context = True
+             out_frame.skip_tts = in_frame.skip_tts
++            out_frame.metadata.update(in_frame.metadata)
+             await self.push_frame(out_frame)
+ 
+-    async def _handle_llm_end(self, skip_tts: bool | None = None):
++    async def _handle_llm_end(self, skip_tts: bool | None = None, *, metadata: dict | None = None):
+         # Flush any remaining text
+         remaining = await self._text_aggregator.flush()
+         if remaining:
+@@ -106,4 +107,5 @@
+                 else remaining.text,
+             )
+             out_frame.skip_tts = skip_tts
++            out_frame.metadata.update(metadata or {})
+             await self.push_frame(out_frame)
+--- a/pipecat/services/tts_service.py
++++ b/pipecat/services/tts_service.py
+@@ -19,6 +19,7 @@
+ 
+ from loguru import logger
+ 
++from pipecat.audio.resamplers.base_audio_resampler import BaseAudioResampler
+ from pipecat.audio.utils import create_stream_resampler
+ from pipecat.frames.frames import (
+     AggregatedTextFrame,
+@@ -366,7 +367,7 @@
+             name=str(self), streaming=self._is_streaming_tokens
+         )
+ 
+-        self._resampler = create_stream_resampler()
++        self.__resampler: BaseAudioResampler | None = None
+ 
+         self._processing_text: bool = False
+         self._tts_contexts: dict[str, TTSContext] = {}
+@@ -477,6 +478,17 @@
+         """Stop text aggregation metrics and reset the started flag."""
+         self._text_aggregation_metrics_started = False
+         await super().stop_text_aggregation_metrics()
++
++    @property
++    def _resampler(self) -> BaseAudioResampler:
++        # Created on first use, so a service whose audio needs no resampling never loads soxr.
++        if self.__resampler is None:
++            self.__resampler = create_stream_resampler()
++        return self.__resampler
++
++    @_resampler.setter
++    def _resampler(self, resampler: BaseAudioResampler) -> None:
++        self.__resampler = resampler
+ 
+     @property
+     def sample_rate(self) -> int:
+--- a/pipecat/services/websocket_service.py
++++ b/pipecat/services/websocket_service.py
+@@ -7,14 +7,13 @@
+ """Base websocket service with automatic reconnection and error handling."""
+ 
+ import asyncio
++import sys
+ import time
+ from abc import ABC, abstractmethod
+ from typing import Protocol
+ 
+ import websockets
+ from loguru import logger
+-from websockets.asyncio.client import ClientConnection
+-from websockets.asyncio.client import connect as websocket_connect
+ from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
+ from websockets.protocol import State
+ 
+@@ -50,35 +49,55 @@
+ WS_CLOSE_TIMEOUT = 2.0
+ 
+ 
+-class _BoundedCloseConnection(ClientConnection):
+-    """Websocket connection that reports an unacknowledged closing handshake.
++# The websocket client imports ``ssl``, so it loads on first use, with the connection class built
++# on it: a Python without ``ssl``, as an app can embed, still imports the services that never
++# open a websocket.
++_CLIENT = ("ClientConnection", "websocket_connect", "_BoundedCloseConnection")
+ 
+-    ``websockets`` enforces ``close_timeout`` internally and absorbs the outcome:
+-    :meth:`close` returns normally whether the peer acknowledged the handshake or
+-    the deadline expired and the connection was dropped. Timing the call is the
+-    only way to tell those apart, which keeps a teardown that silently cost
+-    ``close_timeout`` from going unnoticed.
+-    """
+ 
+-    async def close(self, code: int = 1000, reason: str = "") -> None:
+-        """Close the connection, logging if the peer never acknowledged it.
++def __getattr__(name: str):
++    if name not in _CLIENT:
++        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
++    from websockets.asyncio.client import ClientConnection
++    from websockets.asyncio.client import connect as websocket_connect
+ 
+-        Args:
+-            code: WebSocket close code.
+-            reason: WebSocket close reason.
++    class _BoundedCloseConnection(ClientConnection):
++        """Websocket connection that reports an unacknowledged closing handshake.
++
++        ``websockets`` enforces ``close_timeout`` internally and absorbs the outcome:
++        :meth:`close` returns normally whether the peer acknowledged the handshake or
++        the deadline expired and the connection was dropped. Timing the call is the
++        only way to tell those apart, which keeps a teardown that silently cost
++        ``close_timeout`` from going unnoticed.
+         """
+-        start = time.monotonic()
+-        try:
+-            await super().close(code, reason)
+-        finally:
+-            elapsed = time.monotonic() - start
+-            if self.close_timeout is not None and elapsed >= self.close_timeout:
+-                # Immediately follows the owning service's "Disconnecting from
+-                # ..." log, so the connection needs no further identification.
+-                logger.debug(
+-                    f"Peer did not acknowledge the websocket close within "
+-                    f"{self.close_timeout}s; connection dropped"
+-                )
++
++        async def close(self, code: int = 1000, reason: str = "") -> None:
++            """Close the connection, logging if the peer never acknowledged it.
++
++            Args:
++                code: WebSocket close code.
++                reason: WebSocket close reason.
++            """
++            start = time.monotonic()
++            try:
++                await super().close(code, reason)
++            finally:
++                elapsed = time.monotonic() - start
++                if self.close_timeout is not None and elapsed >= self.close_timeout:
++                    # Immediately follows the owning service's "Disconnecting from
++                    # ..." log, so the connection needs no further identification.
++                    logger.debug(
++                        f"Peer did not acknowledge the websocket close within "
++                        f"{self.close_timeout}s; connection dropped"
++                    )
++
++    _BoundedCloseConnection.__qualname__ = "_BoundedCloseConnection"
++    globals().update(
++        ClientConnection=ClientConnection,
++        websocket_connect=websocket_connect,
++        _BoundedCloseConnection=_BoundedCloseConnection,
++    )
++    return globals()[name]
+ 
+ 
+ class WebsocketService(ABC):
+@@ -161,9 +180,10 @@
+         Returns:
+             The connected websocket.
+         """
++        client = sys.modules[__name__]
+         kwargs.setdefault("close_timeout", self._ws_close_timeout)
+-        kwargs.setdefault("create_connection", _BoundedCloseConnection)
+-        return await websocket_connect(uri, **kwargs)
++        kwargs.setdefault("create_connection", client._BoundedCloseConnection)
++        return await client.websocket_connect(uri, **kwargs)
+ 
+     async def _verify_connection(self) -> bool:
+         """Verify the websocket connection is active and responsive.
+--- a/pipecat/transports/base_output.py
++++ b/pipecat/transports/base_output.py
+@@ -19,9 +19,7 @@
+ from typing import Any
+ 
+ from loguru import logger
+-from PIL import Image
+ 
+-from pipecat.audio.dtmf.utils import load_dtmf_audio
+ from pipecat.audio.mixers.base_audio_mixer import BaseAudioMixer
+ from pipecat.audio.utils import create_stream_resampler, is_silence
+ from pipecat.frames.frames import (
+@@ -310,6 +308,8 @@
+         """
+         if not frame.buttons:
+             return
++        from pipecat.audio.dtmf.utils import load_dtmf_audio
++
+         for button in frame.buttons:
+             dtmf_audio = await load_dtmf_audio(button, sample_rate=self._sample_rate)
+             dtmf_audio_frame = OutputAudioRawFrame(
+@@ -1105,6 +1105,8 @@
+                 # which is kind of what happens in P2P connections.
+                 # We need to add support for that inside the DailyTransport
+                 if frame.size != desired_size:
++                    from PIL import Image
++
+                     image = Image.frombytes(frame.format, frame.size, frame.image)
+                     resized_image = image.resize(desired_size)
+                     # logger.warning(f"{frame} does not have the expected size {desired_size}, resizing")
+--- a/pipecat/utils/string.py
++++ b/pipecat/utils/string.py
+@@ -11,15 +11,14 @@
+ tag parsing for structured text content.
+ 
+ Sentence boundaries use sentencex's embedded language rules without external data.
++sentencex is imported on first use: mobile builds omit the native extension and
++supply their platform's sentence tokenizer to text aggregators instead.
+ """
+ 
+ import re
+ from collections.abc import Callable, Sequence
+ from dataclasses import dataclass
+ from functools import cache
+-
+-# The native extension does not publish Python type stubs.
+-from sentencex import segment  # pyright: ignore[reportAttributeAccessIssue]
+ 
+ _QUOTED_WORD_END = re.compile(r"(?<!\w)([\"'“‘«‹„‟「『]+)[\w.]+\.$")
+ 
+@@ -47,6 +46,9 @@
+     Paragraph separators belong to the following sentence. Trailing whitespace
+     stays in the aggregation buffer until that sentence is emitted.
+     """
++    # The native extension does not publish Python type stubs.
++    from sentencex import segment  # pyright: ignore[reportAttributeAccessIssue]
++
+     code = resolve_sentence_tokenizer_language(language)
+ 
+     def tokenize(text: str) -> list[str]:
+--- a/pipecat/utils/text/simple_text_aggregator.py
++++ b/pipecat/utils/text/simple_text_aggregator.py
+@@ -11,7 +11,7 @@
+ text processing scenarios.
+ """
+ 
+-from collections.abc import AsyncIterator
++from collections.abc import AsyncIterator, Callable
+ from enum import Enum, auto
+ 
+ from pipecat.utils.string import SENTENCE_ENDING_PUNCTUATION, match_endofsentence
+@@ -44,15 +44,32 @@
+     most straightforward implementation of text aggregation for TTS processing.
+     """
+ 
+-    def __init__(self, **kwargs):
++    def __init__(
++        self,
++        *,
++        sentence_boundary_matcher: Callable[[str], int] | None = None,
++        max_buffer_chars: int | None = None,
++        **kwargs,
++    ):
+         """Initialize the simple text aggregator.
+ 
+         Creates an empty text buffer ready to begin accumulating text tokens.
+ 
+         Args:
++            sentence_boundary_matcher: Returns the first complete sentence's end
++                offset, or zero when more text is needed. Defaults to Pipecat's
++                sentencex matcher for the aggregator's language. Native hosts can
++                supply their platform tokenizer.
++            max_buffer_chars: Optional upper bound on buffered characters. Long
++                sentences are released at a space, or at the limit for an
++                uninterrupted token. None keeps complete sentences buffered.
+             **kwargs: Additional arguments passed to BaseTextAggregator (e.g. aggregation_type).
+         """
+         super().__init__(**kwargs)
++        if max_buffer_chars is not None and max_buffer_chars < 1:
++            raise ValueError("max_buffer_chars must be positive")
++        self._sentence_boundary_matcher = sentence_boundary_matcher
++        self._max_buffer_chars = max_buffer_chars
+         self._text = ""
+         self._lookahead_state = _LookaheadState.IDLE
+ 
+@@ -70,7 +87,7 @@
+ 
+         In SENTENCE mode, processes the input text character-by-character. When
+         sentence-ending punctuation is detected, it waits for non-whitespace
+-        lookahead before calling sentencex.
++        lookahead before checking the sentence boundary.
+ 
+         In TOKEN mode, yields the text immediately without buffering.
+ 
+@@ -93,7 +110,28 @@
+             result = await self._check_sentence_with_lookahead(char)
+             if result:
+                 yield result
++            if self._max_buffer_chars and len(self._text) >= self._max_buffer_chars:
++                end = self._text.rfind(" ", 0, self._max_buffer_chars + 1)
++                if end < 1:
++                    end = self._max_buffer_chars
++                result, self._text = self._text[:end], self._text[end:]
++                self._lookahead_state = (
++                    _LookaheadState.AWAITING_CHARACTER
++                    if self._text and self._text[-1] in SENTENCE_ENDING_PUNCTUATION
++                    else _LookaheadState.IDLE
++                )
++                if result.strip():
++                    yield Aggregation(text=result.strip(), type=AggregationType.SENTENCE)
+ 
++    def _match_sentence_end(self, text: str) -> int:
++        """Return the first sentence's end offset in ``text``, or zero."""
++        if self._sentence_boundary_matcher is None:
++            return match_endofsentence(text, language=self.language)
++        eos_marker = self._sentence_boundary_matcher(text)
++        if not 0 <= eos_marker <= len(text):
++            raise ValueError("Sentence boundary offset is outside the buffered text")
++        return eos_marker
++
+     async def _check_sentence_with_lookahead(self, char: str) -> Aggregation | None:
+         """Check a possible sentence ending using text that arrives after it.
+ 
+@@ -132,7 +170,7 @@
+             # Including "?" could make the terminal-punctuation fallback accept
+             # the whole buffer. This temporary slice does not discard the "?".
+             candidate = self._text[:-1] if is_punctuation else self._text
+-            eos_marker = match_endofsentence(candidate, language=self.language)
++            eos_marker = self._match_sentence_end(candidate)
+             if eos_marker:
+                 result = Aggregation(
+                     text=self._text[:eos_marker].strip(" "), type=AggregationType.SENTENCE
+--- a/pipecat/utils/text/transforms/currency.py
++++ b/pipecat/utils/text/transforms/currency.py
+@@ -8,8 +8,6 @@
+ 
+ import re
+ 
+-from num2words import num2words
+-
+ from pipecat.frames.frames import AggregationType
+ 
+ # Maps currency symbol to (singular, plural, cents_singular, cents_plural)
+@@ -25,6 +23,8 @@
+ 
+ 
+ def _amount_to_words(n: float, singular: str, plural: str) -> str:
++    from num2words import num2words  # Imported on use: mobile builds omit it.
++
+     words = num2words(n, lang="en")
+     unit = singular if n == 1 else plural
+     return f"{words} {unit}"
+--- a/pipecat/utils/text/transforms/dates.py
++++ b/pipecat/utils/text/transforms/dates.py
+@@ -9,8 +9,6 @@
+ import re
+ from datetime import datetime
+ 
+-from num2words import num2words
+-
+ from pipecat.frames.frames import AggregationType
+ 
+ # ISO dates: 2023-05-10
+@@ -45,6 +43,8 @@
+ 
+ 
+ def _date_to_spoken(dt: datetime) -> str:
++    from num2words import num2words  # Imported on use: mobile builds omit it.
++
+     year_words = num2words(dt.year, lang="en")
+     month = _MONTH_NAMES[dt.month - 1]
+     day = _ordinal(dt.day)
+--- a/pipecat/utils/text/transforms/numbers.py
++++ b/pipecat/utils/text/transforms/numbers.py
+@@ -9,8 +9,6 @@
+ import re
+ from collections.abc import Callable
+ 
+-from num2words import num2words
+-
+ from pipecat.frames.frames import AggregationType
+ 
+ # Matches integers and decimals, with optional thousand separators.
+@@ -45,6 +43,8 @@
+     """
+ 
+     def _num_to_words(match: re.Match) -> str:
++        from num2words import num2words  # Imported on use: mobile builds omit it.
++
+         whole_str = match.group(1).replace(",", "")
+         frac_str = match.group(2)
+         whole = int(whole_str)
+--- a/pipecat/utils/text/transforms/percentages.py
++++ b/pipecat/utils/text/transforms/percentages.py
+@@ -8,14 +8,14 @@
+ 
+ import re
+ 
+-from num2words import num2words
+-
+ from pipecat.frames.frames import AggregationType
+ 
+ _PERCENT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+ 
+ 
+ def _percent_to_words(match: re.Match) -> str:
++    from num2words import num2words  # Imported on use: mobile builds omit it.
++
+     value = match.group(1)
+     number_str = num2words(float(value), lang="en")
+     return f"{number_str} percent"

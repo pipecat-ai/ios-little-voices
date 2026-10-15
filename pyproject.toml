@@ -1,0 +1,34 @@
+[project]
+name = "little-voices"
+version = "0.1.0"
+description = "Little Voices: an angel and a devil on your iPhone, with Pipecat embedded on the device"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "attrs>=26.1,<27",
+    "docstring-parser>=0.16,<1",
+    "loguru~=0.7.3",
+    "Markdown>=3.7,<4",
+    "packaging>=25",
+    "pydantic>=2.10.6,<3",
+    "pytest>=8,<10",
+    "pytest-asyncio>=1,<2",
+    "ruff>=0.12,<1",
+    "typing-extensions>=4.12",
+    "websockets>=13.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src/python", "src/python/spellspeak_audience/runtime", ".build/pipecat-ai", "scripts"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["models", ".build", "Vendor", "src/python/spellspeak_audience/runtime"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]

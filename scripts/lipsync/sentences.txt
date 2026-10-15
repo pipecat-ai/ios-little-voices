@@ -1,0 +1,61 @@
+# The aligner's training sentences (train_aligner.py), one per line.
+Don't you dare eat that last slice of chocolate cake.
+I think we should go for a walk before it gets dark.
+Oh, come on, one more episode won't hurt anybody.
+You need eight hours of sleep, not four.
+Look at the moon, it's huge tonight!
+Why would you buy shoes you'll never wear?
+Treat yourself, you worked hard all week.
+Maybe call your mother, she misses you.
+Who needs a budget when there's a sale on?
+Put the phone down and drink some water.
+The pool opens at nine thirty on Saturday.
+Should we really order pizza again?
+Your future self will thank you for this.
+Ugh, fine, I'll do the dishes.
+Seriously? You forgot her birthday again?
+Just breathe, everything will be okay.
+Go on, press the big red button.
+It's only twelve dollars, practically free!
+You could learn a new language this year.
+Snooze the alarm, five more minutes.
+A good friend would tell you the truth.
+Quick, hide the cookies before anyone sees!
+Whoa, whoa, slow down and think about it.
+Remember what happened last Thursday?
+That jacket looks amazing on you, buy it.
+Read a book instead of scrolling all night.
+Nobody is watching, just one tiny bite.
+We promised Grandma we'd visit on Sunday.
+You're totally right, I was wrong.
+Is that a spider on your shoulder?
+Let's plan something fun for the weekend.
+Skip the salad, get the burger with fries.
+Exercise makes you feel better, I promise.
+Could you please be quiet for one moment?
+The bus leaves in fifteen minutes, hurry!
+Wow, you actually finished the whole puzzle.
+Honesty is always the best choice.
+Throw caution to the wind, live a little!
+Yawn. This meeting could have been an email.
+Use your inside voice, please.
+A fresh start every morning, isn't that lovely?
+Spend it all now, worry about rent later.
+Your plants look thirsty, water them today.
+Who ate my sandwich? Was it you?
+Choose kindness, even when it's hard.
+Pretty please, just this once?
+Oops, that was the wrong button.
+Hmm, I'm not so sure about that.
+Yes! We won the game!
+Shh, the baby is finally asleep.
+Huge news: the bakery has blueberry muffins.
+Join the choir, you have a lovely voice.
+Measure twice, cut once.
+The music is too loud, turn it down.
+Zero calories if nobody sees you eat it.
+Thank you for being so patient with me.
+Arthur's birthday party starts at seven.
+Push through the pain, you're almost there.
+Vacation mode: on. Responsibilities: off.
+Would you rather fly or be invisible?
