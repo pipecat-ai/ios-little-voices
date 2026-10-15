@@ -404,14 +404,22 @@ enum StageRigChecks {
         // The halo sits on the face's midline, its top 140.8 fu above the eyes.
         check(AngelGeometry.haloCenter.x == 0, "the halo is centred on the midline")
         near(AngelGeometry.haloTop, -140.8, 0.2, "angel halo top")
-        // The wing's top lobe and feather tips fill its box, around the hinge.
-        let lobes = [AngelGeometry.wingTopLobe] + WingShape.featherTips
-        near(lobes.map { $0.center.x - $0.radius }.min()!, AngelGeometry.wingBoxMin.x, 3, "wing outer extent")
-        near(lobes.map { $0.center.y - $0.radius }.min()!, AngelGeometry.wingBoxMin.y, 3, "wing top")
-        near(lobes.map { $0.center.y + $0.radius }.max()!, AngelGeometry.wingBoxMax.y, 3, "wing bottom")
-        for lobe in lobes {
-            check(lobe.center.x + lobe.radius <= AngelGeometry.wingBoxMax.x + 3, "wing lobe inside the box")
+        // The wing's outline fills its box, around the hinge.
+        let rim = WingShape.rim(perSegment: 32)
+        near(rim.map(\.x).min()!, AngelGeometry.wingBoxMin.x, 3, "wing outer extent")
+        near(rim.map(\.y).min()!, AngelGeometry.wingBoxMin.y, 3, "wing top")
+        near(rim.map(\.y).max()!, AngelGeometry.wingBoxMax.y, 3, "wing bottom")
+        check(rim.map(\.x).max()! <= AngelGeometry.wingBoxMax.x + 3, "the wing's inner edge inside the box")
+        // A closed outline, smooth all round but for the notches between its three lobes.
+        var corners = 0
+        for (index, segment) in WingShape.segments.enumerated() {
+            let next = WingShape.segments[(index + 1) % WingShape.segments.count]
+            check(next.0 == segment.3, "the wing's outline is continuous")
+            let incoming = segment.3 - segment.2, outgoing = next.1 - next.0
+            let turn = (incoming.x * outgoing.y - incoming.y * outgoing.x) / (incoming.length * outgoing.length)
+            if abs(turn) > 0.02 { corners += 1 }
         }
+        check(corners == 2, "the wing's lobes meet in two notches and it is smooth elsewhere (\(corners) corners)")
         let hinge = AngelGeometry.wingHinge
         check(hinge.x <= AngelGeometry.wingBoxMax.x && hinge.x >= AngelGeometry.wingBoxMin.x
                   && hinge.y <= AngelGeometry.wingBoxMax.y && hinge.y >= AngelGeometry.wingBoxMin.y, "wing hinge in the box")
@@ -2454,12 +2462,7 @@ extension StageRigChecks {
         near(angel.halo.squash, 1, 1e-9, "the free halo is round")
 
         // Wing box: x −178…−124, y −18…+72 (± 3 fu).
-        var wingMin = Vec2(.infinity, .infinity), wingMax = Vec2(-.infinity, -.infinity)
-        for part in WingShape.parts() {
-            let b = part.bounds
-            wingMin = Vec2(min(wingMin.x, b.min.x), min(wingMin.y, b.min.y))
-            wingMax = Vec2(max(wingMax.x, b.max.x), max(wingMax.y, b.max.y))
-        }
+        let (wingMin, wingMax) = WingShape.outline().bounds
         near(wingMin, AngelGeometry.wingBoxMin, 3.5, "wing box min")
         near(wingMax.y, AngelGeometry.wingBoxMax.y, 3, "wing box bottom")
         check(wingMax.x <= AngelGeometry.wingBoxMax.x + 7, "the wing's inner edge stays near x −124 (\(wingMax.x))")

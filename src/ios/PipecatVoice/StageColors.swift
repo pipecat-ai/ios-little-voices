@@ -111,9 +111,8 @@ struct StageColors: Equatable, Sendable {
     var haloLightRadiusFu: Double
     /// A crisp outline replacing the glow under Reduce Transparency.
     var haloOutline: RGBA?
-    /// Wing fill from the hinge outward.
+    /// Wing fill from the hinge out to the tip: palest by the hinge, a warmer cream at the tip.
     var wingFill: [GradientStop]
-    var wingEdge: RGBA
     /// Horn fill, radial from the inner base corner (`HornShape.shadeCenter`) outward: warm
     /// maroon low down to dark brown at the tip.
     var horn: [GradientStop]
@@ -216,9 +215,7 @@ struct StageColors: Equatable, Sendable {
         haloLight: nil,
         haloLightRadiusFu: 160,
         haloOutline: nil,
-        wingFill: [GradientStop(0, RGBA(0xFFFDF4, alpha: 0.92)), GradientStop(1, RGBA(0xFFFBEA, alpha: 0.78))],
-        // A light edge, so the wing reads as cream-white rather than outlined.
-        wingEdge: RGBA(0xFFFFFF, alpha: 0.5),
+        wingFill: [GradientStop(0, RGBA(0xFDFBE9, alpha: 0.94)), GradientStop(1, RGBA(0xFBF5D7, alpha: 0.9))],
         horn: [GradientStop(0, RGBA(0x6E1F12)), GradientStop(0.25, RGBA(0x58190F)), GradientStop(0.5, RGBA(0x3E120B)),
                GradientStop(0.75, RGBA(0x2F0D07)), GradientStop(1, RGBA(0x2A0B06))],
         hornShine: RGBA(0xD65A30),
@@ -280,8 +277,6 @@ struct StageColors: Equatable, Sendable {
         haloLightRadiusFu: 160,
         haloOutline: nil,
         wingFill: [GradientStop(0, RGBA(0xF7EBC8, alpha: 0.8)), GradientStop(1, RGBA(0xF7EBC8, alpha: 0.65))],
-        // The wing edge reuses the wing's top stop.
-        wingEdge: RGBA(0xF7EBC8, alpha: 0.8),
         horn: [GradientStop(0, RGBA(0x4A150C)), GradientStop(0.3, RGBA(0x36100A)), GradientStop(0.6, RGBA(0x220905)),
                GradientStop(1, RGBA(0x1C0704))],
         hornShine: RGBA(0xB8441F),
@@ -361,7 +356,6 @@ struct StageColors: Equatable, Sendable {
         let atSeam = PerCharacter(angel: Self.sample(angelHalf, at: 0.55), devil: Self.sample(devilHalf, at: 0.3))
         let wing = RGBA(dark ? 0xE8DCB8 : 0xFFF7E1)
         colors.wingFill = [GradientStop(0, wing), GradientStop(1, wing)]
-        colors.wingEdge = Self.composite(wingEdge, over: wing)
         colors.haloGlow = nil
         colors.haloLight = nil
         colors.haloOutline = RGBA(0xE8C35A)

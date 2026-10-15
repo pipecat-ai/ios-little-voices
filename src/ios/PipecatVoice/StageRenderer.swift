@@ -184,14 +184,8 @@ enum StageRenderer {
         return path
     }
 
-    /// The angel's wing outline (screen left) in face units: the parts' union, built once.
-    static let wingOutline: Path = {
-        var union = Path()
-        for part in WingShape.parts() {
-            union = union.isEmpty ? path(part, .identity) : union.union(path(part, .identity))
-        }
-        return union
-    }()
+    /// The angel's wing outline (screen left) in face units.
+    static let wingOutline = path(WingShape.outline(), .identity)
 
     static let hornOutline = path(HornShape.outline(), .identity)
     /// The horn's shine as nested bands (`HornShape.shine`), each filled at `hornShineAlpha`: the
@@ -693,10 +687,8 @@ private struct FaceDrawing {
                 .translatedBy(x: -hingeFu.x, y: -hingeFu.y)
             let outline = StageRenderer.wingOutline.applying(transform)
             let start = StageRenderer.cg(hingeFu).applying(transform)
-            let end = CGPoint(x: -168, y: -8).applying(transform)
+            let end = CGPoint(x: -170, y: -12).applying(transform)
             context.fill(outline, with: .linearGradient(palette.gradient(colors.wingFill), startPoint: start, endPoint: end))
-            context.stroke(outline, with: .color(palette.color(colors.wingEdge)),
-                           style: StrokeStyle(lineWidth: 1.5 * pose.scale, lineJoin: .round))
         }
     }
 

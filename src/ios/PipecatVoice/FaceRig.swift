@@ -844,19 +844,8 @@ struct FaceRig: Sendable {
 
     // MARK: Wings at the edges
 
-    /// Points around the left wing's outline (fu): its top lobe and feather tips, the parts that
-    /// reach out as it swings.
-    private static let wingRim: [Vec2] = {
-        let lobe = AngelGeometry.wingTopLobe
-        var circles = [FaceCircle(center: lobe.center + Vec2(-1, -1), radius: lobe.radius * 1.05)]
-        circles += WingShape.featherTips
-        return circles.flatMap { circle in
-            (0..<12).map { k in
-                let angle = Double(k) * Double.pi / 6
-                return circle.center + Vec2(cos(angle), sin(angle)) * circle.radius
-            }
-        }
-    }()
+    /// Points around the left wing's outline (fu), for how far it reaches as it swings.
+    private static let wingRim = WingShape.rim()
 
     /// How far inside the stage's edge a wing stops, in face units.
     private static let wingMargin = 3.0

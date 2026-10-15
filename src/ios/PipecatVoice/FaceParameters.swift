@@ -939,29 +939,39 @@ enum BlushShape {
     }
 }
 
-/// The angel's left wing (screen left; the right mirrors): a top lobe, three scallops along the
-/// outer lower edge and a body whose inner edge curves convexly from the top lobe to the
-/// hinge. The renderer unions the parts once.
+/// The angel's left wing (screen left; the right mirrors): a long convex leading edge from the
+/// rounded tip down past the hinge, and three lobes stacked along the trailing edge, largest at
+/// the tip, with a sharp notch between neighbours.
 enum WingShape {
-    /// Feather tips along the lower outer edge: the body runs through their centres, so each
-    /// shows as a bump with a notch between neighbours.
-    static let featherTips = [FaceCircle(center: Vec2(-167, 34), radius: 11),
-                              FaceCircle(center: Vec2(-156, 53), radius: 11),
-                              FaceCircle(center: Vec2(-140, 63), radius: 9.5)]
+    /// The outline as cubics (start, controls, end), clockwise from the tip: down the leading
+    /// edge, round the bottom lobe, then up the middle lobe and the top lobe.
+    static let segments: [(Vec2, Vec2, Vec2, Vec2)] = {
+        let tip = Vec2(-167.5, -18), shoulder = Vec2(-137, 6), inner = Vec2(-122, 48), bottom = Vec2(-145, 72)
+        let lowLobe = Vec2(-164.5, 59.5), lowNotch = Vec2(-158, 50)
+        let midLobe = Vec2(-178, 28.5), highNotch = Vec2(-165.5, 19), topLobe = Vec2(-177.5, -5.5)
+        return [(tip, Vec2(-156.5, -18), Vec2(-143, -3), shoulder),
+                (shoulder, Vec2(-129, 18), Vec2(-122, 33.5), inner),
+                (inner, Vec2(-122, 62), Vec2(-131, 72), bottom),
+                (bottom, Vec2(-152.5, 72), Vec2(-164.5, 68.5), lowLobe),
+                (lowLobe, Vec2(-164.5, 53.5), Vec2(-160.5, 53), lowNotch),
+                (lowNotch, Vec2(-167, 47), Vec2(-178, 39), midLobe),
+                (midLobe, Vec2(-178, 18.5), Vec2(-168.5, 20.5), highNotch),
+                (highNotch, Vec2(-171.5, 12.5), Vec2(-177.5, 3.5), topLobe),
+                (topLobe, Vec2(-177.5, -12), Vec2(-174.5, -18), tip)]
+    }()
 
-    static func parts() -> [CurvePath] {
-        var body = CurvePath()
-        body.move(to: AngelGeometry.wingHinge)
-        // The convex inner edge sweeps diagonally from the hinge up and out to the top lobe, so
-        // the wing leans outward.
-        body.cubic(to: Vec2(-152, -16), Vec2(-120, 34), Vec2(-136, -2))
-        body.line(to: Vec2(-171, -6))
-        body.line(to: Vec2(-178, 14))
-        for tip in featherTips { body.line(to: tip.center) }
-        body.line(to: Vec2(-128, 62))
-        body.close()
-        let lobe = AngelGeometry.wingTopLobe
-        return [body, .ellipse(center: lobe.center + Vec2(-1, -1), rx: lobe.radius, ry: lobe.radius * 1.05)]
-            + featherTips.map { .ellipse(center: $0.center, rx: $0.radius, ry: $0.radius) }
+    static func outline() -> CurvePath {
+        var path = CurvePath()
+        path.move(to: segments[0].0)
+        for (_, c1, c2, end) in segments { path.cubic(to: end, c1, c2) }
+        path.close()
+        return path
+    }
+
+    /// Points around the outline, `perSegment` along each cubic.
+    static func rim(perSegment: Int = 4) -> [Vec2] {
+        segments.flatMap { s in
+            (0..<perSegment).map { Bezier.cubic(s.0, s.1, s.2, s.3, Double($0) / Double(perSegment)) }
+        }
     }
 }
