@@ -62,14 +62,17 @@ final class ConversationScript {
     }
 
     func run(_ model: ConversationModel) async {
+        let launched = ContinuousClock.now
         let monitor = PreviewMonitor(model: model)
         lines?.onIssue = { monitor.issue($0) }
         print("DUO_PREVIEW_SCENARIO: \(scenario.name): \(scenario.summary)")
         print(String(format: "DUO_PREVIEW_CLOCK: %.3f", Date().timeIntervalSince1970))
         monitor.start()
         await waitForMicrophone(model)
+        // As a person would, the run waits for the launch intro, after which the microphone shows.
+        try? await Task.sleep(until: launched + .seconds(StageIntro.length + 0.8), clock: .continuous)
         monitor.moment("idle")
-        try? await Task.sleep(for: .seconds(2))
+        try? await Task.sleep(for: .seconds(1))
         await tapMicrophone(model, monitor)
         for step in scenario.steps { await perform(step, model, monitor) }
         monitor.moment("done")
