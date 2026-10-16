@@ -287,15 +287,18 @@ the angel and peach for the devil, with one soft point toward its speaker.
   character's first line plays.
 - **Chrome:** Settings and New conversation sit in the top corners. Before a conversation the
   microphone stands alone above the home indicator: hidden while the intro plays, then fading
-  in, gray with a spinner while the app still loads or a conversation starts, then teal. During
-  one, the dock's glass widens around it and the input picker and End slide out from behind it.
-  Its rings show only while the human speaks. Held to talk, it swells under the finger, with a
-  firm tap as it starts listening and a light one as it is let go; hands-free, a tap mutes it.
-  An error rises in a banner above the dock. The
-  header's buttons, the dock, bubbles, capsules, pill and banner share one glass (`SoftGlass`):
-  a warm tint graded lighter at the top, a soft light along its upper edge and, where it
-  floats, a soft shadow. It is solid under Reduce Transparency and outlined under Increase
-  Contrast.
+  in, gray with a spinner while the app still loads or a conversation starts. The button
+  (`MicrophoneFace`) is chunky, a matte face standing on a darker base that it sinks into when
+  pressed. Before a conversation it shows a bouncing waveform, breathes, and pings a ring of
+  light, inviting a press; in one it shows a microphone, teal, or red while muted, and the
+  dock's glass widens around it as the input picker and End slide out from behind it. While the
+  human is heard, a halo glows around it and rings ripple out (`MicrophoneAura`), added to the
+  stage as light and brighter as they speak. Held to talk, it swells well out from under the
+  thumb, with a firm tap as it starts listening and a light one as it is let go; hands-free, a
+  tap mutes it. An error rises in a banner above the dock. The header's buttons, the dock,
+  bubbles, capsules, pill and banner share one glass (`SoftGlass`): a warm tint graded lighter
+  at the top, a soft light along its upper edge and, where it floats, a soft shadow. It is
+  solid under Reduce Transparency and outlined under Increase Contrast.
 - **New conversation:** the conversation clears at once, and a snapshot of the old screen is
   wiped away from the top behind a glowing edge that waves like the seam (`ResetWipe`), or
   fades under Reduce Motion. Core Animation runs it, so it keeps its pace while the

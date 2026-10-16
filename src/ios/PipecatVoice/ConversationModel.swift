@@ -635,6 +635,9 @@ final class ConversationModel {
     }
 
     private func fail(_ message: String) {
+        #if DEBUG
+        print("CONVERSATION_FAILED: \(message)")
+        #endif
         stop()
         error = message
     }
@@ -664,11 +667,18 @@ final class ConversationModel {
     }
 
     func microphonePickerPresentationChanged(_ presented: Bool) {
+        #if DEBUG
+        print("AUDIO_ROUTE: picker \(presented ? "presented" : "dismissed"), recovering=\(isRecoveringAudio)")
+        #endif
         microphonePickerPresented = presented
         if !presented { finishAudioRouteChange() }
     }
 
     private func audioRouteChanged() {
+        #if DEBUG
+        print("AUDIO_ROUTE: changed, active=\(active) preparing=\(preparing) recovering=\(isRecoveringAudio) "
+            + "picker=\(microphonePickerPresented) from=\(configuredAudioRoute) to=\(audioRouteSignature)")
+        #endif
         guard active, !preparing, !isRecoveringAudio,
               configuredAudioRoute != audioRouteSignature || audio.routeChangeError() != nil else { return }
         // Keep the Pipecat conversation, but cancel the current utterance/reply
@@ -717,6 +727,9 @@ final class ConversationModel {
                       self.captureGeneration == captureGeneration else { return }
                 if let message = audio.routeChangeError() { throw VoiceError(message: message) }
                 configuredAudioRoute = audioRouteSignature
+                #if DEBUG
+                print("AUDIO_ROUTE: recovered on \(audioRouteSignature)")
+                #endif
                 if !muted {
                     // The fresh ASR clock must exist before Python admits input.
                     sendSession(["type": "unmute"])
@@ -727,7 +740,11 @@ final class ConversationModel {
                 preparing = false
                 // The microphone was pressed while the route changed.
                 if talking { beginTalking() }
-            } catch is CancellationError { }
+            } catch is CancellationError {
+                #if DEBUG
+                print("AUDIO_ROUTE: recovery cancelled")
+                #endif
+            }
             catch { if sessionGeneration == generation { fail(error.localizedDescription) } }
         }
     }

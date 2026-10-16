@@ -5,6 +5,8 @@ import SwiftUI
 ///
 /// - `--expression-gallery [rNcM]`: the 4 × 3 expression gallery, or one cell full screen;
 /// - `--mouth-sheet`: both characters' mouth states;
+/// - `--mic-sheet [press]`: the dock's microphone in each of its states, over the devil's half, or
+///   one pressed and let go over and over;
 /// - `--stage-pose <neutral|lean-angel|lean-devil|angel-talking|devil-talking> [--no-captions]`:
 ///   a settled pose on the real stage (`DuoStageView`, its captions, header and dock), the model
 ///   not started;
@@ -36,6 +38,8 @@ enum StageDebug {
     }
 
     static var mouthSheet: Bool { arguments.contains("--mouth-sheet") }
+
+    static var micSheet: Bool { arguments.contains("--mic-sheet") }
 
     static var stagePose: StagePoseRequest? {
         guard let name = value(after: "--stage-pose"), let pose = StagePoseRequest.pose(named: name) else { return nil }
@@ -175,6 +179,80 @@ struct ExpressionGalleryView: View {
 /// Both characters' mouth states: what their expressions hold and what lip sync makes of each
 /// viseme. The angel's sit on cream tiles (`AngelMouthSheet`), the devil's on his orange
 /// (`DevilMouthSheet`), each at a point per face unit.
+/// The dock's microphone in each of its states, two to a row over the devil's half.
+struct MicrophoneSheetView: View {
+    private struct State {
+        let name: String
+        var level = 0.0, muted = false, connecting = false, active = true, holds = true, held = false
+        var hearing = false
+    }
+
+    private static let states = [
+        State(name: "Before a conversation", active: false),
+        State(name: "Loading", connecting: true, active: false),
+        State(name: "Hold to talk"),
+        State(name: "Held, quiet", level: 0.05, held: true, hearing: true),
+        State(name: "Held, speaking", level: 0.6, held: true, hearing: true),
+        State(name: "Hands-free, speaking", level: 0.6, holds: false),
+        State(name: "Muted", muted: true, holds: false),
+        State(name: "Starting, held", connecting: true, held: true),
+    ]
+
+    /// `--mic-sheet press`: one button, held while a voice speaks, then let go, over and over.
+    private static let pressing = StageDebug.value(after: "--mic-sheet") == "press"
+    @SwiftUI.State private var held = false
+    @SwiftUI.State private var level = 0.0
+
+    var body: some View {
+        if Self.pressing { pressingDemo } else { sheet }
+    }
+
+    private var pressingDemo: some View {
+        StagePaletteReader { palette in
+            MicrophoneControl(level: level, muted: false, connecting: false, active: true, holds: true,
+                              held: held, hearing: held, palette: palette, action: {}, onHold: { _ in })
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(LinearGradient(gradient: palette.gradient(palette.colors.devilHalf), startPoint: .top,
+                                           endPoint: .bottom).ignoresSafeArea())
+                .task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(1.2))
+                        held = true
+                        // Speech: syllables rising and falling, with a pause.
+                        for step in 0..<34 {
+                            try? await Task.sleep(for: .milliseconds(80))
+                            level = step % 12 < 9 ? .random(in: 0.25...0.75) : .random(in: 0...0.06)
+                        }
+                        level = 0
+                        held = false
+                    }
+                }
+        }
+    }
+
+    private var sheet: some View {
+        StagePaletteReader { palette in
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
+                ForEach(Array(Self.states.enumerated()), id: \.offset) { _, state in
+                    VStack(spacing: 0) {
+                        MicrophoneControl(level: state.level, muted: state.muted, connecting: state.connecting,
+                                          active: state.active, holds: state.holds, held: state.held,
+                                          hearing: state.hearing, palette: palette, action: {}, onHold: { _ in })
+                            .frame(height: 170)
+                        Text(state.name).font(.caption.weight(.semibold)).foregroundStyle(.white)
+                    }
+                    .frame(height: 205)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(maxHeight: .infinity)
+            .background(LinearGradient(gradient: palette.gradient(palette.colors.devilHalf), startPoint: .top,
+                                       endPoint: .bottom).ignoresSafeArea())
+            .onAppear { StageDebug.log("MIC_SHEET_READY: \(Self.states.count) states") }
+        }
+    }
+}
+
 struct MouthSheetView: View {
     private static let columns = 4
 

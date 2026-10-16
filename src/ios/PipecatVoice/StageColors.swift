@@ -175,8 +175,9 @@ struct StageColors: Equatable, Sendable {
     var micFill: [GradientStop]
     var micMutedFill: [GradientStop]
     var micLoadingFill: [GradientStop]
-    /// The soft light around the microphone button: its halo and the rings rippling from it.
-    var micGlow: RGBA
+    /// The light around the microphone button while it invites a press or hears the human: its
+    /// halo and the rings rippling from it.
+    var micAura: RGBA
     /// Multiplies ink stroke widths.
     var inkStrokeScale: Double
     /// A 2-pt ink line along the seam (Increase Contrast).
@@ -241,8 +242,8 @@ struct StageColors: Equatable, Sendable {
         micFill: [GradientStop(0, RGBA(0x36C7A0)), GradientStop(0.5, RGBA(0x19A383)), GradientStop(1, RGBA(0x0B7A62))],
         micMutedFill: [GradientStop(0, RGBA(0xF26A5F)), GradientStop(0.55, RGBA(0xDB4A48)), GradientStop(1, RGBA(0xB22C35))],
         micLoadingFill: [GradientStop(0, RGBA(0xACA298)), GradientStop(0.5, RGBA(0x8E867E)), GradientStop(1, RGBA(0x6B645D))],
-        // Warm light, so the rings glow over the red-orange.
-        micGlow: RGBA(0xFFB86A, alpha: 0.45),
+        // The button's own aqua, added to the red-orange as light.
+        micAura: RGBA(0x4DFFD2, alpha: 0.6),
         inkStrokeScale: 1,
         seamLine: nil,
         opaque: false)
@@ -336,7 +337,7 @@ struct StageColors: Equatable, Sendable {
         colors.chromeGlass = chromeGlass.map { c, color in RGBA.mix(Self.composite(color, over: chrome[c]), lift, 0.35) }
         colors.dockButton = Self.composite(dockButton, over: colors.chromeGlass.devil)
         colors.bannerTint = Self.composite(bannerTint, over: chrome.devil)
-        colors.micGlow = micGlow.alpha(1)
+        colors.micAura = micAura.alpha(1)
         colors.opaque = true
         return colors
     }

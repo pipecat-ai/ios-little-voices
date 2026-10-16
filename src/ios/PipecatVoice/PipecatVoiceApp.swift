@@ -28,6 +28,8 @@ struct PipecatVoiceApp: App {
             ExpressionGalleryView(request: gallery)
         } else if StageDebug.mouthSheet {
             MouthSheetView()
+        } else if StageDebug.micSheet {
+            MicrophoneSheetView()
         } else if let pose = StageDebug.stagePose {
             ConversationView(model: model, stagePose: pose)
         } else {
