@@ -100,6 +100,7 @@ xcrun simctl launch --console-pty booted ai.pipecat.littlevoices --preview-duo b
 | `--stage-pose <pose>` | Holds a settled pose on the stage: `neutral`, `lean-angel`, `lean-devil`, `angel-talking`, `devil-talking`; `--no-captions` hides the captions. |
 | `--stage-script <name>` | Plays a scripted conversation on the stage with synthetic mouths, without the model: `intro` (the launch intro), `idle`, `handovers`, `interrupt`, `captions` and more. |
 | `--expression-gallery [rNcM]`, `--mouth-sheet` | Shows the faces' expressions, or one of them; every mouth shape. |
+| `--mic-sheet [press]`, `--welcome` | Shows the microphone's states, or one pressed over and over; shows the first launch's welcome card again. |
 | `--rig-seed N`, `--rig-trace` | Sets the stage's random seed; logs its events and frame rate. |
 | `--lipsync-trace`, `--lipsync-formant-only` | Logs each mouth's frames; shapes the mouths from the sound alone, without the words. |
 | `--reduce-motion` | Shows the stage's Reduce Motion mode. |

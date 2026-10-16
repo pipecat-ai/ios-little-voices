@@ -330,11 +330,12 @@ the angel and peach for the devil, with one soft point toward its speaker.
   eases out rather than collapsing. As they make up with a cheeky wink and a giggle, the Little
   Voices logo (`IntroLogo`) drops in from above with a bounce, holds in the middle of the
   screen for 2 s with a soft glow behind it, and slides back up and fades; once it has gone,
-  about 6.5 s in, the microphone fades in. A conversation starting meanwhile (`active` or
-  `preparing`, as from a Shortcut) hands over at once: no more beats, anyone unseen pops in,
-  and a shover's floor is let go. It plays once per launch, not on returning from the
-  background, and pauses with the scene. Under Prefer Cross-Fade Transitions its shoves and
-  releases cross-fade, as a conversation's handovers do.
+  about 6.5 s in, the microphone fades in; on the first launch a welcome card (`WelcomeCard`)
+  introduces the characters first, and the microphone fades in once it is dismissed. A
+  conversation starting meanwhile (`active` or `preparing`, as from a Shortcut) hands over at
+  once: no more beats, anyone unseen pops in, and a shover's floor is let go. It plays once per
+  launch, not on returning from the background, and pauses with the scene. Under Prefer
+  Cross-Fade Transitions its shoves and releases cross-fade, as a conversation's handovers do.
 - **The speaker's mouth:** the talking face's own mouth is lip sync's rest, a closed smile.
   Taking the floor, the speaker's mouth closes from the listener's on its springs, and lip
   sync takes over as the voice starts; a speaker keeping the floor in silence keeps it shut.

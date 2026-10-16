@@ -51,8 +51,8 @@ and the answers App Store Connect asks for.
 > other devices it explains what is missing. iOS may download its English speech recognition
 > assets the first time. No account or network connection is needed.
 >
-> To try it: once the angel and the devil have introduced themselves, press the microphone
-> and allow microphone access. Then hold the microphone, ask a question aloud, such as
+> To try it: once the angel and the devil have introduced themselves, tap Let's go on the
+> welcome card, press the microphone and allow microphone access. Then hold the microphone, ask a question aloud, such as
 > "Should I go to the gym tonight?", and let go; the angel and the devil answer and debate.
 > Hold it again at any time to cut in. End finishes, and New conversation starts afresh.
 > Settings also offers a hands-free mode: tap the microphone once, and pause to finish each

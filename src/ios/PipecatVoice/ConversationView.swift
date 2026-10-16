@@ -18,8 +18,21 @@ struct ConversationView: View {
     @State private var introPlaying = true
     /// The intro's logo shows.
     @State private var logoShown = false
+    /// The first launch's welcome has been dismissed, on this launch or an earlier one.
+    @State private var welcomeSeen = WelcomeCard.seen()
 
     private var connecting: Bool { model.loading || model.preparing }
+
+    /// The welcome shows once the intro has played, until it is dismissed or a conversation starts.
+    private var showsWelcome: Bool {
+        #if DEBUG
+        if stagePose != nil { return false }
+        #endif
+        return !welcomeSeen && !introPlaying && !model.active
+    }
+
+    /// The dock waits for the intro, then for the welcome.
+    private var dockHidden: Bool { introPlaying || showsWelcome }
 
     init(model: ConversationModel) {
         self.model = model
@@ -55,6 +68,19 @@ struct ConversationView: View {
             }
         }
         .overlay { IntroLogo(shown: logoShown) }
+        .overlay {
+            if showsWelcome {
+                ZStack {
+                    Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
+                    WelcomeCard(palette: palette, holdsToTalk: model.microphoneHolds) { dismissWelcome() }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.92)))
+            }
+        }
+        .animation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.45, dampingFraction: 0.8),
+                   value: showsWelcome)
+        // A conversation started another way, as by voice, has no need of it.
+        .onChange(of: model.active) { _, active in if active { dismissWelcome() } }
         .tint(VoicePalette.blue)
         // No mute tick when ending a conversation clears the mute.
         .sensoryFeedback(.selection, trigger: model.muted) { _, _ in model.active }
@@ -125,6 +151,12 @@ struct ConversationView: View {
         .accessibilitySortPriority(2)
     }
 
+    private func dismissWelcome() {
+        guard !welcomeSeen else { return }
+        welcomeSeen = true
+        WelcomeCard.markSeen()
+    }
+
     /// Clears the conversation at once and wipes the old screen away over the fresh stage.
     private func newConversation() {
         let snapshot = ResetWipeSnapshot.capture()
@@ -141,10 +173,10 @@ struct ConversationView: View {
                                             removal: .opacity))
             }
             dock
-                .opacity(introPlaying ? 0 : 1)
-                .allowsHitTesting(!introPlaying)
-                .accessibilityHidden(introPlaying)
-                .animation(.easeInOut(duration: 0.5), value: introPlaying)
+                .opacity(dockHidden ? 0 : 1)
+                .allowsHitTesting(!dockHidden)
+                .accessibilityHidden(dockHidden)
+                .animation(.easeInOut(duration: 0.5), value: dockHidden)
         }
         .frame(maxWidth: 520)
         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 10)
