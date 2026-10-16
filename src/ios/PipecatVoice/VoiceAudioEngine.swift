@@ -15,12 +15,26 @@ final class VoiceAudioEngine {
     private var captureFormat: AVAudioFormat?
     private var echoCancellation: EchoCancellation?
 
-    var inputPickerSession: AVAudioSession? {
-        echoCancellation == nil ? nil : AVAudioSession.sharedInstance()
+    /// The input the session is recording from, or will.
+    var currentInput: AVAudioSessionPortDescription? {
+        let session = AVAudioSession.sharedInstance()
+        return session.currentRoute.inputs.first ?? session.preferredInput
+    }
+
+    /// The session, set up for recording but not active, for Settings' microphone choice between
+    /// conversations.
+    func sessionForInputChoice() -> AVAudioSession {
+        let session = AVAudioSession.sharedInstance()
+        if session.category != .playAndRecord {
+            try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        }
+        return session
     }
 
     /// Prefers echo-cancelled input, which keeps the default mode; falls back to voice processing.
-    func configureSession(preservingInput selectedInput: AVAudioSessionPortDescription? = nil) throws {
+    /// `selectedInput` must still be available; the input with UID `preferred` is used if it is.
+    func configureSession(preservingInput selectedInput: AVAudioSessionPortDescription? = nil,
+                          preferring preferred: String? = nil) throws {
         guard !engine.isRunning, !hasCaptureTap else {
             throw VoiceError(message: "Stop the conversation before configuring audio.")
         }
@@ -35,6 +49,7 @@ final class VoiceAudioEngine {
             try session.setCategory(.playAndRecord, mode: .default,
                                     options: [.defaultToSpeaker, .allowBluetoothHFP])
             try restoreInput(selectedInput, in: session)
+            if selectedInput == nil { prefer(preferred, in: session) }
             if session.isEchoCancelledInputAvailable {
                 do {
                     try session.setPrefersEchoCancelledInput(true)
@@ -60,6 +75,7 @@ final class VoiceAudioEngine {
             try session.setCategory(.playAndRecord, mode: .voiceChat,
                                     options: [.defaultToSpeaker, .allowBluetoothHFP])
             try restoreInput(selectedInput, in: session)
+            if selectedInput == nil { prefer(preferred, in: session) }
             try session.setActive(true)
             try engine.inputNode.setVoiceProcessingEnabled(true)
             try restoreInput(selectedInput, in: session)
@@ -82,6 +98,12 @@ final class VoiceAudioEngine {
             throw VoiceError(message: "The selected microphone is no longer available. Choose another microphone and try again.")
         }
         try session.setPreferredInput(input)
+    }
+
+    private func prefer(_ uid: String?, in session: AVAudioSession) {
+        guard let uid, session.preferredInput?.uid != uid,
+              let input = session.availableInputs?.first(where: { $0.uid == uid }) else { return }
+        try? session.setPreferredInput(input)
     }
 
     func attach(_ player: AVAudioPlayerNode, format: AVAudioFormat) {

@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// The conversation screen: the stage between a header (Settings, New conversation) and a dock
@@ -20,6 +21,7 @@ struct ConversationView: View {
     @State private var logoShown = false
     /// The first launch's welcome has been dismissed, on this launch or an earlier one.
     @State private var welcomeSeen = WelcomeCard.seen()
+    @State private var showHistory = false
 
     private var connecting: Bool { model.loading || model.preparing }
 
@@ -94,6 +96,7 @@ struct ConversationView: View {
             if let error = model.errorMessage { AccessibilityNotification.Announcement("Error: \(error)").post() }
         }
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
+        .sheet(isPresented: $showHistory) { HistoryView(archive: model.history, palette: palette) }
     }
 
     /// One VoiceOver container, read after the header and before the footer.
@@ -189,20 +192,22 @@ struct ConversationView: View {
     /// The microphone's 76 pt with a little glass around it.
     private static let dockHeight: CGFloat = 80
 
-    /// The microphone alone, or during a conversation a glass capsule with the input picker and
-    /// End beside it. The side buttons stay in the hierarchy, pinned to the capsule's ends, so they
-    /// slide out from behind the microphone as it widens and tuck back in as it narrows.
+    /// The microphone, with Conversations beside it once there are any, and during a conversation
+    /// a glass capsule with End too. The side buttons stay in the hierarchy, pinned to the dock's
+    /// ends, so they slide out from behind the microphone as it widens and tuck back in as it
+    /// narrows.
     private var dock: some View {
         let palette = palette, controls = showsControls
         let glyph = palette.colors.chromeGlyph.devil
+        let history = controls || !model.history.conversations.isEmpty
         return ZStack {
-            MicrophoneInputPicker(session: model.microphoneInputSession,
-                                  isEnabled: model.canChooseMicrophone,
-                                  onPresentationChanged: model.microphonePickerPresentationChanged,
-                                  glyphColor: UIColor(red: glyph.r, green: glyph.g, blue: glyph.b, alpha: glyph.a))
-                .frame(width: Self.sideButton, height: Self.sideButton)
-                .softGlass(Circle(), tint: palette.colors.dockButton, kind: .chrome, palette: palette)
-                .dockSideControl(shown: controls)
+            // Outside the capsule it floats on its own glass, as the header's buttons do.
+            GlassCircleButton(title: "Conversations", systemImage: "bubble.left.and.text.bubble.right.fill",
+                              tint: controls ? palette.colors.dockButton : palette.colors.chromeGlass.devil,
+                              glyph: glyph, palette: palette, diameter: Self.sideButton, glyphSize: 18,
+                              shadow: !controls) { showHistory = true }
+                .accessibilityHint("Shows the conversations kept on this device.")
+                .dockSideControl(shown: history)
                 .frame(maxWidth: .infinity, alignment: .leading)
             GlassCircleButton(title: "End conversation", systemImage: "phone.down.fill",
                               tint: palette.colors.dockButton, glyph: glyph, palette: palette,
@@ -214,7 +219,7 @@ struct ConversationView: View {
         .padding(.horizontal, controls ? 14 : 2)
         .frame(height: Self.dockHeight)
         .containerRelativeFrame(.horizontal) { width, _ in
-            controls ? min(width * 0.8, 380) : Self.dockHeight
+            history ? min(width * 0.8, 380) : Self.dockHeight
         }
         .softGlass(Capsule(), tint: palette.colors.chromeGlass.devil, kind: .chrome, palette: palette, shown: controls)
     }
@@ -299,6 +304,10 @@ private struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var preferredName: String
     @State private var inputMode: InputMode
+    @State private var savesConversations: Bool
+    @State private var confirmingDeleteAll = false
+    /// The audio session, set up for choosing a microphone while Settings is open.
+    @State private var microphoneSession: AVAudioSession?
     @State private var showContactPicker = false
     @State private var contactNotice: String?
     @State private var error: String?
@@ -307,6 +316,7 @@ private struct SettingsView: View {
         self.model = model
         _preferredName = State(initialValue: model.userProfile.preferredName)
         _inputMode = State(initialValue: model.inputMode)
+        _savesConversations = State(initialValue: model.savesConversations)
     }
 
     var body: some View {
@@ -341,6 +351,26 @@ private struct SettingsView: View {
                 }
                 .disabled(model.active)
                 Section {
+                    MicrophoneInputPicker(session: microphoneSession) { presented in
+                        if !presented, let microphoneSession { MicrophonePreference.remember(from: microphoneSession) }
+                    }
+                } header: { Text("Microphone") } footer: {
+                    Text("The microphone your conversations use, and its Mic Mode, such as Voice Isolation.")
+                }
+                Section {
+                    Toggle("Keep conversations", isOn: $savesConversations)
+                    Button("Delete All Conversations", role: .destructive) { confirmingDeleteAll = true }
+                        .disabled(model.history.conversations.isEmpty)
+                } header: { Text("History") } footer: {
+                    Text("Transcripts of your conversations stay on this device, so you can read them again. They’re never backed up or shared, and no audio is kept.")
+                }
+                .confirmationDialog("Delete all conversations?", isPresented: $confirmingDeleteAll,
+                                    titleVisibility: .visible) {
+                    Button("Delete All Conversations", role: .destructive) { model.history.deleteAll() }
+                } message: {
+                    Text("Their transcripts are removed from this device.")
+                }
+                Section {
                     ForEach(DuoCharacter.allCases) { character in
                         LabeledContent("\(character.title)’s voice", value: Self.voiceName(character.voice))
                     }
@@ -362,7 +392,7 @@ private struct SettingsView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: { Text("On this device") } footer: {
-                    Text("Conversations stay in memory and are forgotten when they end. Apple Intelligence must be enabled. Apple speech assets may download on first use.")
+                    Text("Apple Intelligence must be enabled. Apple speech assets may download on first use.")
                 }
                 Section("Credits") {
                     credit("Pipecat", detail: "Conversation by Pipecat, Daily’s open-source framework for voice AI.",
@@ -372,6 +402,7 @@ private struct SettingsView: View {
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
             }.navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
+                .onAppear { microphoneSession = model.sessionForMicrophoneChoice() }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
@@ -379,7 +410,8 @@ private struct SettingsView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
                             do {
-                                try model.saveSettings(preferredName: preferredName, inputMode: inputMode)
+                                try model.saveSettings(preferredName: preferredName, inputMode: inputMode,
+                                                       savesConversations: savesConversations)
                                 dismiss()
                             } catch { self.error = error.localizedDescription }
                         }.disabled(model.active)

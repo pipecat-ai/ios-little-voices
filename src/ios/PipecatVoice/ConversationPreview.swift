@@ -86,6 +86,11 @@ final class ConversationScript {
             print("DEMO_DONE")
         } else {
             model.stop()
+            if model.savesConversations {
+                let saved = model.history.conversations.first?.entries ?? []
+                monitor.check("the conversation is kept in the history",
+                              saved.contains { $0.speaker == .human } && saved.contains { $0.speaker != .human })
+            }
             print("DUO_PREVIEW_DONE: \(scenario.name), \(monitor.issues) issues")
         }
     }

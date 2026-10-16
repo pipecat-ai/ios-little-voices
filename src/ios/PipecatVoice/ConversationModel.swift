@@ -110,6 +110,10 @@ final class ConversationModel {
     private(set) var hearing = false
     /// The microphone was tapped rather than held, so it shows how to talk.
     private(set) var showsHoldHint = false
+    /// The conversations kept on the device, to read again.
+    let history = ConversationArchive()
+    /// Whether conversations are kept, from Settings.
+    private(set) var savesConversations = HistorySettings.load()
     /// Setting up audio, speech and models: as a conversation starts, and after an audio route change.
     private(set) var preparing = false
     /// Loading the voices, Audience and speech recognition as the app opens or returns.
@@ -148,8 +152,8 @@ final class ConversationModel {
     /// Counts playback stopping early while a character holds the floor; the stage startles at each.
     private(set) var interruptions = 0
 
-    var microphoneInputSession: AVAudioSession? { active ? audio.inputPickerSession : nil }
-    var canChooseMicrophone: Bool { active && inputReady && !isRecoveringAudio && !preparing }
+    /// The audio session for choosing a microphone in Settings, between conversations.
+    func sessionForMicrophoneChoice() -> AVAudioSession? { active ? nil : audio.sessionForInputChoice() }
 
     /// The human's words this turn, as they are recognized, until a character answers.
     var userLine: UserTranscript? {
@@ -190,6 +194,8 @@ final class ConversationModel {
     private var sessionTask: Task<Void, Never>?
     private var captureTask: Task<Void, Never>?
     private var pressedAt: ContinuousClock.Instant?
+    /// This conversation's transcript, while it is being kept.
+    private var recorder: TranscriptRecorder?
     private var releaseTask: Task<Void, Never>?
     private var hintTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
@@ -204,7 +210,6 @@ final class ConversationModel {
     private var sessionGeneration = UUID()
     private var captureGeneration = UUID()
     private var inputReady = false
-    private var microphonePickerPresented = false
     private var isRecoveringAudio = false
     private var routeRestarting = false
     private var configuredAudioRoute = ""
@@ -307,7 +312,7 @@ final class ConversationModel {
             }
     }
 
-    func saveSettings(preferredName: String, inputMode: InputMode) throws {
+    func saveSettings(preferredName: String, inputMode: InputMode, savesConversations: Bool) throws {
         guard !active else { throw VoiceError(message: "End the conversation before changing settings.") }
         let profile = UserProfile(preferredName: preferredName)
         try ProfileSettings.save(profile)
@@ -315,6 +320,8 @@ final class ConversationModel {
         userProfile = profile
         InputMode.save(inputMode)
         self.inputMode = inputMode
+        HistorySettings.save(savesConversations)
+        self.savesConversations = savesConversations
     }
 
     /// Whether the microphone is held to talk: in this conversation, or in the next one.
@@ -424,6 +431,7 @@ final class ConversationModel {
         muted = false
         holdsToTalk = holdingToTalk
         speech.holdsToTalk = holdingToTalk
+        recorder = savesConversations ? TranscriptRecorder() : nil
         userLevel = 0
         inputReady = false
         preparing = true
@@ -435,7 +443,7 @@ final class ConversationModel {
             do {
                 try Task.checkCancellation()
                 guard active, sessionGeneration == generation else { return }
-                try audio.configureSession()
+                try audio.configureSession(preferring: MicrophonePreference.uid)
                 do { try await loadModels().value }
                 catch {
                     throw VoiceError(message: "The angel’s and the devil’s voices couldn’t load. Close other apps "
@@ -598,12 +606,13 @@ final class ConversationModel {
     func stop() {
         ConversationLaunchRequests.shared.cancel()
         if ready { sendSession(["type": "stop"]) }
+        keepTranscript()
+        recorder = nil
         active = false
         muted = false
         releaseHold()
         inputReady = false
         preparing = false
-        microphonePickerPresented = false
         isRecoveringAudio = false
         routeRestarting = false
         configuredAudioRoute = ""
@@ -666,18 +675,10 @@ final class ConversationModel {
         return (ports + [session.mode.rawValue, String(session.sampleRate)]).joined(separator: "|")
     }
 
-    func microphonePickerPresentationChanged(_ presented: Bool) {
-        #if DEBUG
-        print("AUDIO_ROUTE: picker \(presented ? "presented" : "dismissed"), recovering=\(isRecoveringAudio)")
-        #endif
-        microphonePickerPresented = presented
-        if !presented { finishAudioRouteChange() }
-    }
-
     private func audioRouteChanged() {
         #if DEBUG
         print("AUDIO_ROUTE: changed, active=\(active) preparing=\(preparing) recovering=\(isRecoveringAudio) "
-            + "picker=\(microphonePickerPresented) from=\(configuredAudioRoute) to=\(audioRouteSignature)")
+            + "from=\(configuredAudioRoute) to=\(audioRouteSignature)")
         #endif
         guard active, !preparing, !isRecoveringAudio,
               configuredAudioRoute != audioRouteSignature || audio.routeChangeError() != nil else { return }
@@ -702,15 +703,13 @@ final class ConversationModel {
                   self.captureGeneration == captureGeneration else { return }
             await speech.stop()
         }
-        // Keep the recording session alive while Apple's menu is open. Changing
-        // its category mid-selection can replace the user's chosen microphone.
-        if !microphonePickerPresented { finishAudioRouteChange() }
+        finishAudioRouteChange()
     }
 
     private func finishAudioRouteChange() {
-        guard active, isRecoveringAudio, !microphonePickerPresented, !routeRestarting else { return }
+        guard active, isRecoveringAudio, !routeRestarting else { return }
         routeRestarting = true
-        let selectedInput = microphoneInputSession?.currentRoute.inputs.first
+        let selectedInput = audio.currentInput
         let generation = sessionGeneration
         let captureGeneration = self.captureGeneration
         let previous = captureTask
@@ -790,6 +789,7 @@ final class ConversationModel {
             // A session prepared after a fully played reply serves the next question; a
             // generation in progress is cancelled.
             cancelRequests(preservePreparation: requests.isEmpty)
+            keepTranscript()
             currentTurn = turn
             resetStage()
             userTranscript = UserTranscript()
@@ -850,6 +850,7 @@ final class ConversationModel {
             let text = event.message.data?.text ?? ""
             if event.message.data?.final == true { userTranscript.commit(text) } else { userTranscript.partial = text }
             if !text.isEmpty { hasConversation = true }
+            if let turn = event.turn { recorder?.heard(human: userTranscript.text, turn: turn) }
         default: break
         }
     }
@@ -921,8 +922,14 @@ final class ConversationModel {
         if heardLine == line { addressed = to } else if isAhead(line) { lineAddressees[line] = to }
     }
 
+    /// Keeps the transcript so far, if this conversation is being kept.
+    private func keepTranscript() {
+        if let recorder, !recorder.isEmpty { history.save(recorder.conversation) }
+    }
+
     /// Nobody writes more this turn. Once the last line has played, the floor is the human's.
     private func endExchange() {
+        keepTranscript()
         exchangeOver = true
         writing.removeAll()
         lineAddressees.removeAll()
@@ -1016,6 +1023,9 @@ final class ConversationModel {
                     if scheduled == 0 {
                         speech.logAudioMetrics(stage: "synthesis_first_pcm")
                         reveal(line: event.line, speaker: character, sentence: event.text)
+                        if let turn, let line = event.line, let character, let text = event.text {
+                            recorder?.heard(sentence: text, line: line, speaker: character, turn: turn)
+                        }
                     }
                     #if DEBUG
                     if scheduled > 0, !playing {

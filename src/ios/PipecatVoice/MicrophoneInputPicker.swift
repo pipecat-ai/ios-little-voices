@@ -2,42 +2,46 @@ import AVFoundation
 import AVKit
 import SwiftUI
 
-/// The dock's button for Apple's input menu, which owns route and Mic Mode selection: Voice
-/// Isolation is the user's choice, and the app only reports the mode in use.
+/// The microphone conversations use, chosen in Settings: its port's UID, used whenever it is
+/// connected.
+enum MicrophonePreference {
+    private static let key = "preferred-input"
+
+    static var uid: String? { UserDefaults.standard.string(forKey: key) }
+
+    /// Remembers the input `session` prefers or records from.
+    static func remember(from session: AVAudioSession) {
+        guard let input = session.preferredInput ?? session.currentRoute.inputs.first else { return }
+        UserDefaults.standard.set(input.uid, forKey: key)
+    }
+}
+
+/// Settings' row for Apple's input menu, which owns route and Mic Mode selection: Voice Isolation
+/// is the user's choice, and the app only reports the mode in use. It shows the microphone and
+/// its mode, and tells `onPresentationChanged` as the menu opens and closes.
 struct MicrophoneInputPicker: UIViewRepresentable {
     let session: AVAudioSession?
-    let isEnabled: Bool
     let onPresentationChanged: (Bool) -> Void
-    /// The device glyph's colour, dimmed while the picker is unavailable.
-    var glyphColor: UIColor = .label
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> UIButton {
         let button = UIButton(type: .system)
-        let title = "Choose audio device"
         button.configuration = .plain()
-        button.accessibilityLabel = title
+        button.contentHorizontalAlignment = .leading
         button.accessibilityHint = "Shows the microphones you can use and their Mic Modes, such as Voice Isolation."
-        // The glyph keeps one size at every text size, so the large content viewer shows it.
-        button.showsLargeContentViewer = true
-        button.largeContentTitle = title
-        button.scalesLargeContentImage = true
-        button.addInteraction(UILargeContentViewerInteraction())
         button.addTarget(context.coordinator, action: #selector(Coordinator.present), for: .touchUpInside)
         context.coordinator.attach(button)
         return button
     }
 
     func updateUIView(_ button: UIButton, context: Context) {
-        context.coordinator.update(session: session, isEnabled: isEnabled, glyphColor: glyphColor,
-                                   onPresentationChanged: onPresentationChanged)
+        context.coordinator.update(session: session, onPresentationChanged: onPresentationChanged)
     }
 
-    /// The proposed size, at least 44 pt tall, so the whole round button takes taps.
+    /// The proposed width, at least 44 pt tall.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
         let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? uiView.intrinsicContentSize.width
-        if let height = proposal.height, height.isFinite { return CGSize(width: width, height: max(44, height)) }
         let size = uiView.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
@@ -56,8 +60,6 @@ struct MicrophoneInputPicker: UIViewRepresentable {
         private var observers: [NSObjectProtocol] = []
         private var observesMicrophoneMode = false
         private var presenting = false
-        private var enabled = false
-        private var glyphColor = UIColor.label
         private var onPresentationChanged: (Bool) -> Void = { _ in }
 
         func attach(_ button: UIButton) {
@@ -75,11 +77,8 @@ struct MicrophoneInputPicker: UIViewRepresentable {
                                                            options: [.initial, .new], context: nil)
         }
 
-        func update(session: AVAudioSession?, isEnabled: Bool, glyphColor: UIColor,
-                    onPresentationChanged: @escaping (Bool) -> Void) {
+        func update(session: AVAudioSession?, onPresentationChanged: @escaping (Bool) -> Void) {
             self.onPresentationChanged = onPresentationChanged
-            enabled = isEnabled
-            self.glyphColor = glyphColor
             if self.session !== session {
                 interaction?.dismiss()
                 if let interaction { button?.removeInteraction(interaction) }
@@ -91,13 +90,11 @@ struct MicrophoneInputPicker: UIViewRepresentable {
                     button?.addInteraction(interaction)
                 }
             }
-            // A route change can disable the button while the picker is open; the interaction
-            // stays attached until the selection finishes.
             refresh()
         }
 
         @objc func present() {
-            guard enabled, session != nil, !presenting, button?.window != nil else { return }
+            guard session != nil, !presenting, button?.window != nil else { return }
             interaction?.present()
         }
 
@@ -126,7 +123,7 @@ struct MicrophoneInputPicker: UIViewRepresentable {
 
         private func refresh() {
             guard let button else { return }
-            let input = session?.currentRoute.inputs.first
+            let input = session.flatMap { $0.preferredInput ?? $0.currentRoute.inputs.first ?? $0.availableInputs?.first }
             let mode: String
             switch AVCaptureDevice.activeMicrophoneMode {
             case .standard: mode = "Standard"
@@ -134,15 +131,22 @@ struct MicrophoneInputPicker: UIViewRepresentable {
             case .voiceIsolation: mode = "Voice Isolation"
             @unknown default: mode = "System Mic Mode"
             }
+            let name = input?.portName ?? "Microphone"
             var configuration = button.configuration ?? .plain()
             configuration.image = UIImage(systemName: deviceSymbol(for: input?.portType ?? .builtInMic))
-            configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
-            configuration.baseForegroundColor = enabled && session != nil ? glyphColor : glyphColor.withAlphaComponent(0.38)
-            configuration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
+            configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(textStyle: .body)
+            configuration.imagePadding = 12
+            configuration.title = name
+            configuration.attributedSubtitle = AttributedString(NSAttributedString(
+                string: mode, attributes: [.foregroundColor: UIColor.secondaryLabel,
+                                           .font: UIFont.preferredFont(forTextStyle: .footnote)]))
+            configuration.titleAlignment = .leading
+            configuration.baseForegroundColor = .label
+            configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
             button.configuration = configuration
-            button.largeContentImage = configuration.image
-            button.isEnabled = enabled && session != nil
-            button.accessibilityValue = "\(input?.portName ?? "Microphone"), \(mode)"
+            button.isEnabled = session != nil
+            button.accessibilityLabel = "Microphone"
+            button.accessibilityValue = "\(name), \(mode)"
             button.invalidateIntrinsicContentSize()
         }
 
