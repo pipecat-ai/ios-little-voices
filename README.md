@@ -2,80 +2,51 @@
 
 An angel and a devil sit on your shoulders. Ask them anything out loud: they debate it, then
 each gives you a verdict, in their own voices, with faces that mouth their words. Everything
-runs on the iPhone, with no server and no API keys:
+runs on the iPhone: no server, no API keys, no network.
 
-- **Apple Speech** hears you, and Apple's echo cancellation lets you talk over them.
-- **[Pipecat](https://github.com/pipecat-ai/pipecat)**, embedded in Python on the device, runs
-  the conversation.
-- **Apple Foundation Models** writes both characters' lines.
-- **[SpellSpeak Audience](https://huggingface.co/spellspeak/audience)** reads who each line is
-  for, which decides who speaks next.
-- **Gradium Phonon** speaks each character in their own voice, and lip sync shapes the words.
+## Models
 
-The interface is one squishy stage: whoever speaks swells into the other's half, their words
-appear a sentence at a time, and a character writing their next line shows typing dots. It is
-always light, and Dynamic Type, VoiceOver, Reduce Transparency and Reduce Motion are supported.
-The characters speak and understand English.
+| Job | Model | Runs on |
+| --- | --- | --- |
+| Hearing you | Apple SpeechAnalyzer, with SoundAnalysis for voice activity | iOS |
+| Writing the lines | Apple Foundation Models | iOS (Apple Intelligence) |
+| Who speaks next | [Pipecat Audience](https://huggingface.co/pipecat-ai/audience) rc2.1, a 32M Ettin encoder (Apache-2.0) | Core ML |
+| Speaking | [Gradium Phonon 31m](https://huggingface.co/gradium/phonon-31m-en), q8 (Apache-2.0), on Gradium's `ptts` runtime | CPU, via Rust |
+| Lip sync | A phone aligner trained on Phonon speech, with the CMU Pronouncing Dictionary | CPU |
+
+[Pipecat](https://github.com/pipecat-ai/pipecat) 1.12.0 runs the conversation, in Python 3.13
+embedded in the app. The characters' voices are in [src/voices](src/voices).
 
 ## Requirements
 
 - A Mac with Apple silicon, macOS 27 and Xcode 27.
-- [uv](https://docs.astral.sh/uv/) and [Rust](https://rustup.rs) (setup adds the iOS targets).
-- An iPhone with iOS 27 that supports Apple Intelligence, with Apple Intelligence turned on and
-  its model downloaded.
-- The two models below, which are not in this repository.
+- [uv](https://docs.astral.sh/uv/) and [Rust](https://rustup.rs).
+- An iPhone with iOS 27 and Apple Intelligence turned on.
 
-## Get the models
-
-Both go in `models/`, which Git ignores apart from [models/README.txt](models/README.txt).
-
-**Gradium Phonon.** The checkpoint is not in this repository: obtain it from
-[Gradium](https://gradium.ai) (currently `phonon-0e03182e.200`) and place `config.json`,
-`model.q8.gguf` and `tokenizer.json` in `models/phonon/`. A script to download it will follow.
-The characters' voices, made for that checkpoint, are in [src/voices](src/voices).
-
-**SpellSpeak Audience.** Convert release rc2.1 to Core ML with the converter in
-[spellspeak-models](https://github.com/spellspeak/models), which fetches the release:
+## Get it running
 
 ```sh
-cd /path/to/spellspeak-models/audience/coreml
-uv run convert.py --out /path/to/little-voices/models/audience
-```
-
-**Other voices.** Any voice made for the same Phonon checkpoint can speak for a character: put
-it in `src/voices/` and name it in `DuoCharacter.voice` (Swift), `CAST` in
-`src/python/mobile_app/duo.py` and `PHONON_VOICES` in `scripts/phonon_package.py`.
-
-## Set up
-
-```sh
+python3 scripts/download_models.py            # Phonon and Audience into models/ (135 MB)
 uv sync --locked
-uv run --no-sync python scripts/setup.py
+uv run --no-sync python scripts/setup.py      # patched Pipecat, Python for iOS, native builds
 ```
 
-Setup downloads the pipecat-ai 1.12.0 release from PyPI, checks it against its pinned SHA-256
-and applies [the app's patch](patches/README.md) to it in `.build/pipecat-ai/`. It then checks
-both models, fetches checksum-pinned Python 3.13 for iOS (BeeWare's Python-Apple-support),
-cross-compiles pydantic-core and the Phonon runtime (`native/phonon-ffi`), stages the app's
-Python packages and generates the Xcode project. Builds need no network after that. Add
-`--platform device` or `--platform simulator` to prepare one target, or `--pipecat-only` to
-prepare only the patched Pipecat, which is all the tests need from setup. After adding or
-removing app source files, run `python3 scripts/generate_project.py`; after changing the app's
-Python dependencies, `uv run --no-sync python scripts/stage_python.py`; after changing the
-patch, `uv run --no-sync python scripts/setup.py --pipecat-only`.
+The models are pinned to one Hugging Face commit and checked by SHA-256. Setup downloads the
+pipecat-ai release and applies [the app's patch](patches/README.md), fetches Python for iOS,
+cross-compiles the native code and generates the Xcode project; after that, builds need no
+network.
 
-## Run
+Open `PipecatVoice.xcodeproj`, choose your signing team for the **PipecatVoice** target, and run
+on your iPhone. Hold the microphone, ask a question and let go; hold it again to cut in.
+Past conversations are in the dock; Settings has a hands-free mode, your name and the
+microphone.
 
-**On an iPhone.** Open `PipecatVoice.xcodeproj`, choose your signing team for the
-**PipecatVoice** target, and run. Hold the microphone, ask a question and let go. Hold it
-again at any time to cut in, End to finish, and New conversation to start afresh. In
-Settings, choose hands-free instead (tap the microphone once, pause to finish each turn, and
-speak to cut in), give your name (or pick your contact) so the characters can greet you, and
-set up "Hey Little Voices" with Apple's Vocal Shortcuts. The
-button beside the microphone opens Apple's microphone picker.
+After adding or removing Swift files, run `python3 scripts/generate_project.py`; after changing
+the app's Python dependencies, `uv run --no-sync python scripts/stage_python.py`.
 
-**In the Simulator.** Apple's on-device speech recognition doesn't run there, so you can't
-talk to the characters. The scripted conversations run the rest of the app instead:
+## In the Simulator
+
+Speech recognition doesn't run in the Simulator, so scripted conversations stand in for you:
 
 ```sh
 xcodebuild -project PipecatVoice.xcodeproj -scheme PipecatVoice -configuration Debug \
@@ -84,44 +55,21 @@ xcrun simctl install booted .build/DerivedData/Build/Products/Debug-iphonesimula
 xcrun simctl launch --console-pty booted ai.pipecat.littlevoices --preview-duo barge-in
 ```
 
-`--demo-question` also works in the Simulator when the Mac has Apple Intelligence turned on.
+Debug builds take more launch arguments for checks, demos and the stage; Release builds compile
+none of them in. They're listed in [docs/native-tts.md](docs/native-tts.md#diagnostics).
 
-**Debug launch arguments.** Debug builds accept these; Release builds compile none of them in.
-[docs/native-tts.md](docs/native-tts.md#diagnostics) has the details and log lines.
+## How it works
 
-| Argument | What it does |
-| --- | --- |
-| `--preview-duo [scenario]` | Plays a scripted conversation through the whole app, with stand-ins for the microphone and the language model, and flags anything the screen should never show: `gym` (the default), `barge-in`, `new-conversation`, `background`, `mute`, `long-and-short`, `markup`, `error`, `debate`, `hold`. |
-| `--record-audio`, `--preview-buffered` | With `--preview-duo`: record what plays; synthesize each sentence in full before it plays. |
-| `--demo-question "…"` | Asks the live language model a question for you and records what plays. |
-| `--verify-phonon`, `--verify-phonon-playback` | Check Phonon synthesis, and playback, cancellation and restart. |
-| `--verify-audience`, `--verify-voice-settings` | Check Audience on Core ML against its reference runtime; print the voices. |
-| `--benchmark-phonon` | Phonon's streaming benchmark (build with `SWIFT_OPTIMIZATION_LEVEL=-O`). |
-| `--stage-pose <pose>` | Holds a settled pose on the stage: `neutral`, `lean-angel`, `lean-devil`, `angel-talking`, `devil-talking`; `--no-captions` hides the captions. |
-| `--stage-script <name>` | Plays a scripted conversation on the stage with synthetic mouths, without the model: `intro` (the launch intro), `idle`, `handovers`, `interrupt`, `captions` and more. |
-| `--expression-gallery [rNcM]`, `--mouth-sheet` | Shows the faces' expressions, or one of them; every mouth shape. |
-| `--mic-sheet [press]`, `--welcome` | Shows the microphone's states, or one pressed over and over; shows the first launch's welcome card again. |
-| `--rig-seed N`, `--rig-trace` | Sets the stage's random seed; logs its events and frame rate. |
-| `--lipsync-trace`, `--lipsync-formant-only` | Logs each mouth's frames; shapes the mouths from the sound alone, without the words. |
-| `--reduce-motion` | Shows the stage's Reduce Motion mode. |
+When you finish speaking, Audience reads who you were talking to, and that character answers
+first. The other replies, they debate for up to six lines, and each turns to you with a verdict.
+Each line is written while the one before it plays. The characters' instructions are in
+`src/python/mobile_app/prompts.py` and the director in `src/python/mobile_app/duo.py`.
 
-**Recording the screen with sound.** Start Control Center's screen recording with its
-microphone off to capture the characters' voices; turn it on to include yours.
-
-## How the conversation works
-
-When you finish speaking, Audience reads who your line was for. The character you name or
-describe ("Angel, …", "you with the horns") answers first; otherwise the likelier one does.
-Then the other replies, and they debate: a line aimed at the other character gets an answer,
-and whoever's last word went to the other turns to you with a verdict. An exchange has at most
-six lines, each written while the one before it plays. A line for either of them that asks
-nothing ("You lied to me.") gets a "Who, me?" from each.
-
-The characters' instructions are in `src/python/mobile_app/prompts.py` and the director in
-`src/python/mobile_app/duo.py`. To see how Apple's model plays them, run
-`uv run --no-sync python scripts/persona_eval.py` on a Mac with Apple Intelligence.
-[docs/architecture.md](docs/architecture.md) describes the pipeline, the native services and
-the stage.
+- [docs/architecture.md](docs/architecture.md): the pipeline, the native services, the stage
+  and lip sync.
+- [docs/native-tts.md](docs/native-tts.md): Phonon in the app, and the debug launch arguments.
+- [docs/validation.md](docs/validation.md): what to check, and the latest results.
+- [docs/app-store.md](docs/app-store.md) and [docs/privacy.md](docs/privacy.md): submission.
 
 ## Tests
 
@@ -131,40 +79,28 @@ uv run --no-sync ruff check src/python scripts tests
 uv run --no-sync ruff format --check src/python scripts tests
 ```
 
-The tests import the patched Pipecat that setup prepares. They run the whole Python pipeline
-against a fake native host, check that the patch applies to the pinned release, and compile
-Swift checks for macOS from `tests/native/`. [docs/validation.md](docs/validation.md) lists
-what to check on the Simulator and on an iPhone.
+The tests need setup's patched Pipecat (`scripts/setup.py --pipecat-only` is enough). They run
+the Python pipeline against a fake native host and compile the Swift checks in `tests/native/`
+for macOS.
 
-## Project layout
+## Layout
 
 ```text
-src/ios/PipecatVoice/            the SwiftUI app: the stage, the conversation, the native
-                                 services and the embedded Python host
-src/python/mobile_app/           the Pipecat bot, the director and the characters
-src/python/pipecat_apple/        Pipecat services for the native host: the bridge, speech
-                                 recognition, the language model, Phonon, transport and VAD
-src/python/spellspeak_audience/  SpellSpeak Audience's reference runtime (vendored)
-src/voices/                      the characters' Phonon voices
-src/branding/                    the app icon, launch art and logo, and their export
-patches/                         the app's patch to the Pipecat release (patches/README.md)
-native/phonon-ffi/               a C interface to Gradium's ptts runtime, in Rust
-scripts/                         setup, native builds, packaging, project generation
-tests/                           Python tests, and Swift checks in tests/native/
-models/                          the Phonon checkpoint and Audience models (not in Git)
-docs/                            architecture, native speech, validation, App Store
-                                 submission and the privacy policy
+src/ios/PipecatVoice/         the SwiftUI app, its native services and the embedded Python host
+src/python/mobile_app/        the Pipecat bot, the director and the characters
+src/python/pipecat_apple/     Pipecat services for the native host
+src/python/pipecat_audience/  Audience's reference runtime (vendored)
+src/voices/                   the characters' Phonon voices
+src/branding/                 the icon, launch art and logo
+native/phonon-ffi/            a C interface to Gradium's ptts runtime, in Rust
+patches/                      the app's patch to the Pipecat release
+scripts/                      model download, setup, builds, packaging
+tests/                        Python tests, and Swift checks in tests/native/
+models/                       the downloaded models (not in Git)
 ```
 
-## Credits and licences
+## Licence
 
-Little Voices is released under the BSD 2-Clause License; see [LICENSE](LICENSE).
-
-Speech is by Gradium's Phonon, used under Gradium's terms, on its `ptts` runtime (MIT or
-Apache-2.0). Who each line is for is read by SpellSpeak Audience (Apache-2.0; its base model,
-Ettin, is MIT). Pipecat, which the app embeds as the pipecat-ai release with a patch for iOS,
-and pipecat-visemes, whose formant analysis the lip sync ports, are Daily's (BSD 2-Clause),
-and the lip sync's pronunciations come from the CMU Pronouncing Dictionary (BSD-style).
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) has every component's notice, including the
-embedded Python and its packages. The app icon and launch artwork are described in
-[src/branding/README.md](src/branding/README.md).
+Little Voices is BSD 2-Clause ([LICENSE](LICENSE)). Phonon 31m and Pipecat Audience are
+Apache-2.0; the characters' voices are used under Gradium's terms. Every component's notice is
+in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
