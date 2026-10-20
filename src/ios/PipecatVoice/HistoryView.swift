@@ -198,15 +198,12 @@ private struct ChatBubble: View {
         .accessibilityLabel("\(entry.speaker.character?.title ?? "You"): \(entry.text)")
     }
 
+    /// The character's face, already cropped to a circle.
     private func avatar(_ character: DuoCharacter) -> some View {
-        Circle()
-            .fill(ChatColors.accent(character, palette: palette))
-            .frame(width: 28, height: 28)
-            .overlay {
-                Image(systemName: character == .angel ? "sparkles" : "flame.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-            }
+        Image(character == .angel ? "AngelAvatar" : "DevilAvatar")
+            .resizable()
+            .frame(width: 34, height: 34)
+            .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
             .accessibilityHidden(true)
     }
 }

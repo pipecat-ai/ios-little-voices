@@ -6,7 +6,10 @@ and below (and, on iPad, its colours to either side), so no screen crops a wing 
 iPhone images cover 440 x 956 pt, the largest iPhone, at 2x and 3x; the iPad image covers
 1376 x 1376 pt, an iPad Pro 13-inch in either orientation, at 2x. iOS centres the launch
 image without scaling it. The logo, which the launch intro shows, is `logo.png` trimmed to
-its art, on a transparent ground, at 520 pt wide, 2x and 3x.
+its art, on a transparent ground, at 520 pt wide, 2x and 3x. The avatars, which name the angel
+and the devil in a saved conversation, are the faces in `avatars.png`, each in a circle of its
+ground with a gutter around it, at 34 pt, 2x and 3x. The characters who peek over the first
+launch's welcome are `welcome.png` trimmed to its art, at 300 pt wide, 2x and 3x.
 
     uv run --no-project --with pillow --with numpy python src/branding/export.py
 """
@@ -14,10 +17,18 @@ its art, on a transparent ground, at 520 pt wide, 2x and 3x.
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent / "ios/PipecatVoice/Assets.xcassets"
+
+# The faces in `avatars.png`: the angel's on the left half, the devil's on the right.
+AVATARS = ("AngelAvatar", "DevilAvatar")
+# How far the faces reach across their circles' radius: the rest is gutter, so no cheek
+# touches the edge.
+AVATAR_FILL = 0.82
+AVATAR_POINTS = 34
+WELCOME_POINTS = 300
 
 
 def save(image: Image.Image, path: Path, profile: bytes | None) -> None:
@@ -92,6 +103,62 @@ def transparent(art: Image.Image) -> Image.Image:
     return Image.fromarray(pixels, "RGBA")
 
 
+def circle(art: Image.Image, size: int) -> Image.Image:
+    """`art`, a square, at `size` px and cropped to a circle, its edge drawn at 4x and reduced
+    so it is smooth."""
+    mask = Image.new("L", (size * 4, size * 4), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size * 4 - 1, size * 4 - 1), fill=255)
+    image = art.convert("RGB").resize((size, size), Image.LANCZOS).convert("RGBA")
+    image.putalpha(mask.resize((size, size), Image.LANCZOS))
+    return image
+
+
+def measure(half: Image.Image) -> tuple[tuple[int, ...], tuple[int, int], float]:
+    """The face on `half`, a flat ground: the ground's colour, the centre of the face's bounds,
+    and how far the face reaches from that centre."""
+    a = np.asarray(half, np.float32)
+    border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+    ground = np.median(border, axis=0)
+    ys, xs = np.nonzero(np.linalg.norm(a - ground, axis=2) > 40)
+    x, y = round((xs.min() + xs.max()) / 2), round((ys.min() + ys.max()) / 2)
+    return tuple(int(c) for c in ground), (x, y), float(np.hypot(xs - x, ys - y).max())
+
+
+def avatars() -> None:
+    art = Image.open(HERE / "avatars.png").convert("RGB")
+    side, inset = art.width // 2, 4  # clear of the seam between the halves
+    halves = [
+        art.crop((i * side + inset, inset, (i + 1) * side - inset, art.height - inset))
+        for i in range(2)
+    ]
+    faces = [measure(half) for half in halves]
+    # One radius for both, so the faces keep their sizes; the grounds are padded out to it.
+    radius = round(max(reach for _, _, reach in faces) / AVATAR_FILL)
+    for name, half, (ground, (x, y), _) in zip(AVATARS, halves, faces):
+        padded = ImageOps.expand(half, border=radius, fill=ground)
+        face = padded.crop((x, y, x + 2 * radius, y + 2 * radius))
+        images = ASSETS / f"{name}.imageset"
+        for scale in (2, 3):
+            circle(face, AVATAR_POINTS * scale).save(images / f"{name}@{scale}x.png", optimize=True)
+
+
+def welcome() -> None:
+    art = Image.open(HERE / "welcome.png").convert("RGBA")
+    pixels = np.asarray(art, np.float32).copy()
+    # Cut out a shade short of opaque, the art's alpha is stretched so its body is whole, and
+    # the faint haze around it dropped.
+    alpha = pixels[..., 3]
+    solid = np.percentile(alpha[alpha > 128], 2)
+    pixels[..., 3] = np.clip((alpha - 8) / (solid - 8) * 255, 0, 255)
+    art = Image.fromarray(pixels.round().astype(np.uint8), "RGBA")
+    art = art.crop(art.getchannel("A").getbbox())
+    images = ASSETS / "WelcomeCharacters.imageset"
+    for scale in (2, 3):
+        width = WELCOME_POINTS * scale
+        size = (width, round(art.height * width / art.width))
+        art.resize(size, Image.LANCZOS).save(images / f"WelcomeCharacters@{scale}x.png", optimize=True)
+
+
 def main() -> None:
     icon = Image.open(HERE / "app-icon.png")
     save(
@@ -119,6 +186,8 @@ def main() -> None:
         width = 520 * scale
         size = (width, round(logo.height * width / logo.width))
         logo.resize(size, Image.LANCZOS).save(images / f"Logo@{scale}x.png", optimize=True)
+    avatars()
+    welcome()
 
 
 if __name__ == "__main__":
