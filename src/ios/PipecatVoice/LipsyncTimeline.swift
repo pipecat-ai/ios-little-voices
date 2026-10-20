@@ -29,7 +29,8 @@ final class LipsyncTimeline {
     /// peak) falls from `voicedEnergy` (about −10 dB) to `quietEnergy` (about −21 dB).
     nonisolated static let quietEnergy = 0.25
     nonisolated static let voicedEnergy = 0.6
-    /// A text pose keeps its width and rounding down to quieter hops (about −16 to −31 dB).
+    /// A text pose, whose sounds are known, holds down to quieter hops (about −16 to −31 dB), such as
+    /// the words a sentence trails off on.
     nonisolated static let shapeQuietEnergy = 0.1
     nonisolated static let shapeVoicedEnergy = 0.4
     /// Keyframes and closures lead their audio: lips shape a sound just before it is heard.
@@ -277,12 +278,10 @@ final class LipsyncTimeline {
         rest.blended(to: pose, by: smoothstep(energy, quietEnergy, voicedEnergy))
     }
 
-    /// A text pose: its opening gated like a formant pose, its width and rounding down to quieter hops.
+    /// A text pose: its opening, width and rounding give way to rest only below a text pose's quieter
+    /// gate.
     nonisolated static func gatedText(_ pose: Pose, energy: Double) -> Pose {
-        let shape = smoothstep(energy, shapeQuietEnergy, shapeVoicedEnergy)
-        return Pose(openness: gated(pose, energy: energy).openness,
-                    width: rest.width + (pose.width - rest.width) * shape,
-                    rounding: rest.rounding + (pose.rounding - rest.rounding) * shape)
+        rest.blended(to: pose, by: smoothstep(energy, shapeQuietEnergy, shapeVoicedEnergy))
     }
 
     nonisolated private static func smoothstep(_ x: Double, _ low: Double, _ high: Double) -> Double {

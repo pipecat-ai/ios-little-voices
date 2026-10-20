@@ -1,5 +1,15 @@
 import Foundation
 
+/// A reaction asked of the characters, rather than one they choose.
+enum StageReaction: Equatable, Sendable {
+    /// The angel and the devil laugh together, at each other.
+    case laughTogether
+    /// One rolls their eyes.
+    case eyeRoll(DuoCharacter)
+    /// One gives the other `expression` for `seconds`.
+    case look(DuoCharacter, FaceExpression, seconds: Double)
+}
+
 /// What the stage reads from the conversation. It changes only on events.
 struct StageInputs: Equatable, Sendable {
     var active = false
@@ -19,6 +29,8 @@ struct StageInputs: Equatable, Sendable {
     var talking: Set<DuoCharacter> = []
     /// Lines stopped early while a character held the floor.
     var interruptions = 0
+    /// The reactions asked for so far; each plays once, as it is added.
+    var reactions: [StageReaction] = []
 }
 
 /// How the stage is shown, apart from the conversation.
@@ -598,6 +610,7 @@ struct StageSimulation: Sendable {
         if new.userFinal, !old.userFinal, let text = new.userText {
             record(.userFinal(text, CaptionCues.classify(text, speaker: nil)), at: t)
         }
+        for reaction in new.reactions.dropFirst(old.reactions.count) { react(reaction, at: t) }
 
         if stageFloor == nil, debounce == nil, releaseAt == nil {
             let lean = StagePreset.resolve(floor: nil, addressed: new.addressed)
@@ -923,6 +936,24 @@ struct StageSimulation: Sendable {
         introduced = true
         intro = nil
         dropIntroFloor(at: stepper.time)
+    }
+
+    /// Plays a reaction asked of the characters, as the intro's looks play.
+    private mutating func react(_ reaction: StageReaction, at t: Double) {
+        guard !mode.reduceMotion else { return }
+        switch reaction {
+        case .laughTogether:
+            for c in DuoCharacter.allCases {
+                directors[c].perform(.laughAlong, .laughing, at: t, for: 1.8, atOther: true)
+                startGestures(of: c, at: t)
+            }
+        case .eyeRoll(let c):
+            directors[c].perform(.eyeRoll, .neutral, at: t, for: CharacterDirector.rollDuration, atOther: true)
+            startGestures(of: c, at: t)
+        case .look(let c, let expression, let seconds):
+            directors[c].perform(.glare, expression, at: t, for: seconds, atOther: true)
+            startGestures(of: c, at: t)
+        }
     }
 
     /// Springs back to nobody's floor if a shove holds one and no conversation does.

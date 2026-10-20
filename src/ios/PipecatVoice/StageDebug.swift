@@ -7,6 +7,8 @@ import SwiftUI
 /// - `--mouth-sheet`: both characters' mouth states;
 /// - `--mic-sheet [press]`: the dock's microphone in each of its states, over the devil's half, or
 ///   one pressed and let go over and over;
+/// - `--showreel [scene]`: the angel and the devil play a scene after the intro, without the header
+///   and dock (`ConversationModel.playShowreel`);
 /// - `--stage-pose <neutral|lean-angel|lean-devil|angel-talking|devil-talking> [--no-captions]`:
 ///   a settled pose on the real stage (`DuoStageView`, its captions, header and dock), the model
 ///   not started;
@@ -40,6 +42,8 @@ enum StageDebug {
     static var mouthSheet: Bool { arguments.contains("--mouth-sheet") }
 
     static var micSheet: Bool { arguments.contains("--mic-sheet") }
+
+    static var showreel: Bool { arguments.contains("--showreel") }
 
     static var stagePose: StagePoseRequest? {
         guard let name = value(after: "--stage-pose"), let pose = StagePoseRequest.pose(named: name) else { return nil }

@@ -98,8 +98,25 @@ final class LipsyncLexicon: Sendable {
 
     var count: Int { offsets.count }
 
+    /// Words CMUdict lacks that the app's characters say about themselves, as Phonon says them.
+    private static let additions: [String: [LipsyncPhone]] = [
+        "pipecat": "P AY1 P K AE2 T",
+        "gradium": "G R EY1 D IY0 AH0 M",
+        "phonon": "F OW1 N AA0 N",
+    ].mapValues(arpabet)
+
+    /// Phones spelled as CMUdict spells them, such as "F OW1 N AA0 N".
+    private static func arpabet(_ text: String) -> [LipsyncPhone] {
+        text.split(separator: " ").compactMap { part in
+            let stress = part.last?.wholeNumberValue
+            return LipsyncPhone.Symbol(rawValue: String(stress == nil ? part : part.dropLast()))
+                .map { LipsyncPhone($0, stress: stress ?? 0) }
+        }
+    }
+
     /// A lowercase word's dictionary phones (its first pronunciation), or nil.
     func lookup(_ word: String) -> [LipsyncPhone]? {
+        if let phones = Self.additions[word] { return phones }
         let key = Array(word.utf8)
         var low = 0, high = offsets.count
         while low < high {

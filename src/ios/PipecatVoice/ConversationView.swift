@@ -25,10 +25,19 @@ struct ConversationView: View {
 
     private var connecting: Bool { model.loading || model.preparing }
 
+    /// The header and dock, which a showreel leaves out.
+    private var showsChrome: Bool {
+        #if DEBUG
+        !StageDebug.showreel
+        #else
+        true
+        #endif
+    }
+
     /// The welcome shows once the intro has played, until it is dismissed or a conversation starts.
     private var showsWelcome: Bool {
         #if DEBUG
-        if stagePose != nil { return false }
+        if stagePose != nil || StageDebug.showreel { return false }
         #endif
         return !welcomeSeen && !introPlaying && !model.active
     }
@@ -54,9 +63,11 @@ struct ConversationView: View {
         stage
         .safeAreaInset(edge: .top, spacing: 0) {
             header.onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { headerBottom = $0 }
+                .opacity(showsChrome ? 1 : 0)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             footer.onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { footerTop = $0 }
+                .opacity(showsChrome ? 1 : 0)
         }
         .overlay {
             if let resetWipe {

@@ -16,6 +16,7 @@ extension StageInputs {
         userFinal = model.userLine?.isFinal ?? false
         talking = Set(DuoCharacter.allCases.filter { model.mouths[$0]?.isAnimating == true })
         interruptions = model.interruptions
+        reactions = model.reactions
     }
 }
 

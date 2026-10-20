@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import NaturalLanguage
 import Observation
 import OSLog
 
@@ -151,6 +152,8 @@ final class ConversationModel {
     let mouths = Dictionary(uniqueKeysWithValues: DuoCharacter.allCases.map { ($0, LipsyncTimeline()) })
     /// Counts playback stopping early while a character holds the floor; the stage startles at each.
     private(set) var interruptions = 0
+    /// Reactions asked of the characters, which the stage plays as each is added.
+    private(set) var reactions: [StageReaction] = []
 
     /// The audio session for choosing a microphone in Settings, between conversations.
     func sessionForMicrophoneChoice() -> AVAudioSession? { active ? nil : audio.sessionForInputChoice() }
@@ -1075,8 +1078,135 @@ final class ConversationModel {
 #if DEBUG
 /// Developer checks, previews and demos, chosen by launch argument (see docs/native-tts.md).
 extension ConversationModel {
+    /// A showreel's line: who says it, and who it is for, if not the viewer.
+    private struct ShowreelLine {
+        let character: DuoCharacter
+        let text: String
+        var to: Set<DuoCharacter> = []
+    }
+
+    /// The showreel's scenes: their lines, then the reactions that end them, each that many seconds
+    /// after the last.
+    private static let showreels: [String: (lines: [ShowreelLine], ending: [(StageReaction, after: Double)])] = [
+        "hello": ([ShowreelLine(character: .angel, text: "Hello! I'm Angel. Let's be a little light in the world!"),
+                   ShowreelLine(character: .devil,
+                                text: "Oh, please. I'm Devil, and you should listen to me. My world has snacks.")],
+                  [(.laughTogether, 0.4)]),
+        "on-device": ([ShowreelLine(character: .angel,
+                                    text: "Devil, did you know we're running entirely on-device, with no network?",
+                                    to: [.devil]),
+                       ShowreelLine(character: .devil,
+                                    text: "Yes! I knew that. I also know we're built with Pipecat, and Gradium's Phonon "
+                                        + "text-to-speech.", to: [.angel])],
+                      []),
+        "outro": ([ShowreelLine(character: .devil, text: "So, Angel, apparently we live in a repo on GitHub now?",
+                                to: [.angel]),
+                   ShowreelLine(character: .angel, text: "That's right, Devil! And soon, the App Store.", to: [.devil]),
+                   ShowreelLine(character: .devil, text: "Oh, great. Now everyone will be asking us questions!")],
+                  [(.laughTogether, 0.4)]),
+        "handsome": ([ShowreelLine(character: .devil, text: "I must say, I do sound rather handsome. Devilishly handsome.")],
+                     [(.eyeRoll(.angel), 0.2), (.look(.angel, .sideEye, seconds: 1.6), 1.1)]),
+    ]
+
+    /// `--showreel [scene]`: once the intro has played and the voices have loaded, the angel and the
+    /// devil play a scene (`showreels`, `hello` by default), as they would in a conversation, then
+    /// react as it ends. With `--record-audio` it records what plays (`DEMO_AUDIO`); it logs
+    /// `SHOWREEL_END` with the wall-clock time the last line ends, `SHOWREEL_REACTION` with each
+    /// reaction's, then `SHOWREEL_DONE`.
+    fileprivate func playShowreel() async {
+        let name = StageDebug.value(after: "--showreel") ?? "hello"
+        guard let scene = Self.showreels[name] else {
+            print("SHOWREEL_FAILED: no scene \(name); try \(Self.showreels.keys.sorted().joined(separator: ", "))")
+            return
+        }
+        while awaitingIntro || loading { try? await Task.sleep(for: .milliseconds(50)) }
+        do {
+            // Synthesized in full before it plays, so a busy machine, recording the screen, cannot
+            // starve playback.
+            var takes: [[ShowreelSentence]] = []
+            for line in scene.lines { takes.append(try await synthesizeShowreel(line.text, as: line.character)) }
+            try? await Task.sleep(for: .seconds(0.6))
+            try audio.configureSession()
+            try audio.start()
+            if ProcessInfo.processInfo.arguments.contains("--record-audio") {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("demo-audio.caf")
+                try? FileManager.default.removeItem(at: url)
+                let latency = AVAudioSession.sharedInstance().outputLatency
+                try audio.recordOutput(to: url) { started in
+                    print(String(format: "DEMO_AUDIO: %.6f %.6f %@", started.timeIntervalSince1970, latency, url.path))
+                }
+            }
+            resetStage()
+            for (index, line) in scene.lines.enumerated() {
+                if index > 0 { try? await Task.sleep(for: .seconds(0.45)) }
+                lineAddressees[index] = line.to
+                try await playShowreel(takes[index], as: line.character, line: index, last: index == scene.lines.count - 1)
+            }
+            print(String(format: "SHOWREEL_END: %.6f", Date().timeIntervalSince1970))
+            for (reaction, after) in scene.ending {
+                try? await Task.sleep(for: .seconds(after))
+                reactions.append(reaction)
+                print(String(format: "SHOWREEL_REACTION: %.6f", Date().timeIntervalSince1970))
+            }
+            try? await Task.sleep(for: .seconds(3))
+            audio.stopRecordingOutput()
+            print("SHOWREEL_DONE")
+        } catch {
+            print("SHOWREEL_FAILED: \(error.localizedDescription)")
+        }
+    }
+
+    /// Words Phonon says best respelled: it says the caption's word as the respelling.
+    private static let showreelRespellings = ["Pipecat": "Pipe cat", "GitHub": "Git Hub"]
+
+    /// A sentence of a showreel line: its caption, what Phonon says, and the audio.
+    private struct ShowreelSentence {
+        let caption: String
+        let spoken: String
+        let samples: [Float]
+    }
+
+    /// One of the scene's lines, a sentence at a time as a conversation's are, each synthesized in
+    /// full.
+    private func synthesizeShowreel(_ text: String, as character: DuoCharacter) async throws -> [ShowreelSentence] {
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        var sentences: [ShowreelSentence] = []
+        for range in tokenizer.tokens(for: text.startIndex..<text.endIndex) {
+            let caption = text[range].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !caption.isEmpty else { continue }
+            let spoken = Self.showreelRespellings.reduce(caption) { $0.replacingOccurrences(of: $1.key, with: $1.value) }
+            let synthesis = try await synthesizer.synthesize(spoken, voice: character.voice)
+            var samples: [Float] = []
+            for try await chunk in synthesis.samples { samples += chunk }
+            await synthesis.waitForCompletion()
+            sentences.append(ShowreelSentence(caption: caption, spoken: spoken, samples: samples))
+        }
+        return sentences
+    }
+
+    /// Plays a line's sentences as a conversation's play, with a breath between them: each through
+    /// playback, lip sync and its caption. After the last, the floor is nobody's again.
+    private func playShowreel(_ sentences: [ShowreelSentence], as character: DuoCharacter, line: Int,
+                              last: Bool) async throws {
+        for (index, sentence) in sentences.enumerated() {
+            if index > 0 { try? await Task.sleep(for: .seconds(0.2)) }
+            mouths[character]?.expect(text: sentence.spoken)
+            reveal(line: line, speaker: character, sentence: sentence.caption)
+            if last, index == sentences.count - 1 { exchangeOver = true }
+            if let previous = speakingCharacter, previous != character { mouths[previous]?.finish() }
+            speakingCharacter = character
+            // In the chunks Phonon streams, as a conversation's audio arrives.
+            for start in stride(from: 0, to: sentence.samples.count, by: 1920) {
+                try player.enqueue(Array(sentence.samples[start..<min(start + 1920, sentence.samples.count)]))
+            }
+            try await player.finish()
+        }
+    }
+
     fileprivate func runLaunchDiagnostics() {
         let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--showreel") { Task { await playShowreel() } }
         if arguments.contains("--verify-voice-settings") {
             print("PHONON_SETTINGS: voices=\(VoiceSettings.voices.joined(separator: ","))")
         }
