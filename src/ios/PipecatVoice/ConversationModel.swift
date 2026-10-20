@@ -21,7 +21,7 @@ private struct NativeEvent: Decodable {
     var speaker: String?
     var voice: String?
     var line: Int?
-    // An Audience request's inputs, rendered by the SpellSpeak runtime in Python.
+    // An Audience request's inputs, rendered by the Audience runtime in Python.
     var cards: [String]?
     var utterance: String?
     var current: Int?
@@ -399,8 +399,8 @@ final class ConversationModel {
             await speech.prepare()
             do { try await audienceReady }
             catch {
-                // Without the model, Python reads who each line is for with SpellSpeak's rules baseline.
-                logger.error("SpellSpeak Audience failed to load: \(error.localizedDescription, privacy: .public)")
+                // Without the model, Python reads who each line is for with Audience's rules baseline.
+                logger.error("Pipecat Audience failed to load: \(error.localizedDescription, privacy: .public)")
             }
             do { try await voices }
             catch {
@@ -1105,7 +1105,7 @@ extension ConversationModel {
         print("PYTHON_MODULES: \(runtime.importedModuleNames().joined(separator: " "))")
     }
 
-    /// Run the bundled Audience model on inputs the SpellSpeak reference runtime rendered, and
+    /// Run the bundled Audience model on inputs the Audience reference runtime rendered, and
     /// compare with its answer on ONNX Runtime (tests/fixtures/audience/answers.json).
     private func verifyAudience() async {
         let started = ProcessInfo.processInfo.systemUptime

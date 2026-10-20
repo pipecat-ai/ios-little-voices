@@ -145,9 +145,9 @@ PyMODINIT_FUNC PyInit__pipecat_native(void) { return PyModule_Create(&module); }
     if (!PyStatus_Exception(status)) {
         status = PyConfig_SetBytesString(&config, &config.program_name, "PipecatVoice");
     }
-    // SpellSpeak Audience's reference runtime imports as `contracts` and `harness`, as released.
+    // Pipecat Audience's reference runtime imports as `contracts` and `harness`, as released.
     for (NSString *relative in @[@"python/lib/python3.13", @"python/lib/python3.13/lib-dynload",
-                                 @"python-app", @"python-app/spellspeak_audience/runtime",
+                                 @"python-app", @"python-app/pipecat_audience/runtime",
                                  @"python-packages"]) {
         if (PyStatus_Exception(status)) break;
         wchar_t *path = Py_DecodeLocale([bundle stringByAppendingPathComponent:relative].UTF8String, NULL);

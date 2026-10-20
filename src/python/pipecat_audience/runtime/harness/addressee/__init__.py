@@ -1,4 +1,4 @@
-"""The addressee model (released as SpellSpeak Audience): who a line was said to, the player's or a character's.
+"""The addressee model (released as Pipecat Audience): who a line was said to, the player's or a character's.
 
 - `render`: how the single-pass model reads a request (addressee-input-0.1), shared by training and the runtime.
 - `features`: the cached-cards model's inputs (addressee-tt-0.5 for rc1, addressee-tt-0.6 for rc2), shared by training and

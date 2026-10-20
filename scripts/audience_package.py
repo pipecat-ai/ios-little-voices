@@ -1,4 +1,4 @@
-"""Validate SpellSpeak Audience's Core ML package and compile it for the app."""
+"""Validate Pipecat Audience's Core ML package and compile it for the app."""
 
 import hashlib
 import json
@@ -8,13 +8,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIENCE_RELEASE = "rc2.1"
+# The release's commit in its Hugging Face repo, whose coreml/ holds the Core ML package
+# (scripts/download_models.py fetches it).
+AUDIENCE_REPO = "pipecat-ai/audience"
+AUDIENCE_REVISION = "979a299867fffd08093bcfb52ab821f5688c48cd"
 AUDIENCE_DIR = "models/audience"
 MODELS = ("AudienceEncoder.mlpackage", "AudienceHead.mlpackage")
 DATA = ("tokenizer.json", "config.json", "coreml.json")
-CONVERT = (
-    "Convert it with spellspeak-models: cd audience/coreml && uv run convert.py --out "
-    "<this repo>/models/audience"
-)
+DOWNLOAD = "To download it, run python3 scripts/download_models.py"
 
 
 def validate_audience(root: Path = ROOT) -> dict:
@@ -24,8 +25,8 @@ def validate_audience(root: Path = ROOT) -> dict:
     missing += [name for name in DATA if not (package / name).is_file()]
     if missing:
         raise RuntimeError(
-            f"SpellSpeak Audience {AUDIENCE_RELEASE} on Core ML is required in {AUDIENCE_DIR}/. "
-            f"Missing: {', '.join(missing)}. {CONVERT}"
+            f"Pipecat Audience {AUDIENCE_RELEASE} on Core ML is required in {AUDIENCE_DIR}/. "
+            f"Missing: {', '.join(missing)}. {DOWNLOAD}"
         )
     manifest = json.loads((package / "coreml.json").read_text())
     config = json.loads((package / "config.json").read_text())
@@ -35,7 +36,7 @@ def validate_audience(root: Path = ROOT) -> dict:
     ):
         raise RuntimeError(
             f"{AUDIENCE_DIR}/ holds Audience {manifest.get('release')!r}; the app's request code is "
-            f"{AUDIENCE_RELEASE}'s. {CONVERT}"
+            f"{AUDIENCE_RELEASE}'s. {DOWNLOAD}"
         )
     return manifest
 

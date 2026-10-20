@@ -4,6 +4,11 @@ requires."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# The checkpoint: Gradium's Phonon 31m, at one commit of its Hugging Face repo
+# (scripts/download_models.py fetches it).
+PHONON_MODEL = "Phonon 31m"
+PHONON_REPO = "gradium/phonon-31m-en"
+PHONON_REVISION = "52433c46975bfa13144c56204c9f4ee1c5b148aa"
 # The voices the cast speaks in (mobile_app.duo.CAST), kept in src/voices; the app loads and
 # bundles only these.
 PHONON_VOICES = ("Angel_F01", "Devil_01")
@@ -24,5 +29,6 @@ def validate_phonon(root: Path = ROOT) -> None:
     if missing:
         raise RuntimeError(
             "Gradium Phonon requires its checkpoint in models/phonon/ and the characters' voices "
-            f"in src/voices/. Missing: {', '.join(missing)}"
+            f"in src/voices/. Missing: {', '.join(missing)}. To download the checkpoint, run "
+            "python3 scripts/download_models.py"
         )

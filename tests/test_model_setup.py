@@ -1,9 +1,12 @@
+import hashlib
+import io
 import json
 import plistlib
 from pathlib import Path
 
 import audience_package
 import build_native
+import download_models
 import generate_project
 import phonon_package
 import pytest
@@ -94,6 +97,65 @@ def test_packaging_requires_phonon_and_copies_only_model_assets(tmp_path):
         "voices/Angel_F01.safetensors",
         "voices/Devil_01.safetensors",
     ]
+
+
+def test_model_download_checks_each_file_and_keeps_another_checkpoint(tmp_path, monkeypatch):
+    phonon, audience = download_models.MODELS.values()
+    assert set(phonon[4]) == set(phonon_package.PHONON_FILES)
+    assert {path.split("/", 1)[0] for path in audience[4]} == {
+        *audience_package.MODELS,
+        *audience_package.DATA,
+    }
+    served, models = {}, {}
+    for name, (repo, revision, prefix, folder, files) in download_models.MODELS.items():
+        pinned = {}
+        for path in files:
+            url = f"https://huggingface.co/{repo}/resolve/{revision}/{prefix}{path}"
+            served[url] = json.dumps(
+                {"release": "rc2.1", "render_version": "addressee-tt-0.6", "file": path}
+            ).encode()
+            pinned[path] = hashlib.sha256(served[url]).hexdigest()
+        models[name] = (repo, revision, prefix, folder, pinned)
+    monkeypatch.setattr(download_models, "MODELS", models)
+    monkeypatch.setattr(download_models, "ROOT", tmp_path)
+    requested = []
+
+    def urlopen(url):
+        requested.append(url)
+        return io.BytesIO(served[url])
+
+    monkeypatch.setattr(download_models.urllib.request, "urlopen", urlopen)
+
+    def download(*flags):
+        monkeypatch.setattr("sys.argv", ["download_models.py", *flags])
+        download_models.main()
+
+    checkpoint = tmp_path / "models/phonon"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "config.json").write_text(
+        json.dumps({"model_id": {"sig": "0e03182e", "epoch": 200}})
+    )
+    with pytest.raises(SystemExit, match="models/phonon/ holds another model \\(0e03182e@200\\)"):
+        download()
+    assert requested == []
+    download("--replace")
+    assert requested == list(served)
+    assert audience_package.validate_audience(tmp_path)["release"] == "rc2.1"
+    requested.clear()
+    download()
+    assert requested == []
+    weights = tmp_path / "models/audience/AudienceHead.mlpackage/Data/com.apple.CoreML/weights"
+    (weights / "weight.bin").write_bytes(b"truncated")
+    served[
+        next(
+            url
+            for url in served
+            if url.endswith("AudienceHead.mlpackage/Data/com.apple.CoreML/weights/weight.bin")
+        )
+    ] = b"corrupted on the way"
+    with pytest.raises(SystemExit, match="weight.bin does not match"):
+        download()
+    assert [path.name for path in weights.iterdir()] == ["weight.bin"]
 
 
 def test_native_build_compiles_phonon_and_pydantic_core(tmp_path, monkeypatch):

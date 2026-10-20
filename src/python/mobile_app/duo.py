@@ -1,4 +1,4 @@
-"""The angel and the devil: one language model writes both characters' lines, SpellSpeak Audience directs.
+"""The angel and the devil: one language model writes both characters' lines, Pipecat Audience directs.
 
 Each of the human's turns gets a short exchange (docs/architecture.md, "The angel and the devil"). Audience reads
 who each line is for, which picks who speaks next; each line is written in its speaker's view of the conversation

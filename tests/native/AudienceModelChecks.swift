@@ -2,7 +2,7 @@ import CoreML
 import Foundation
 
 // Runs AudienceModel (tokenizer, Core ML encoder and head) on the requests in tests/fixtures/audience/answers.json
-// and compares its answers with the SpellSpeak reference runtime's on ONNX Runtime.
+// and compares its answers with the Audience reference runtime's on ONNX Runtime.
 private struct Fixture: Decodable {
     struct Request: Decodable {
         let cards: [String]

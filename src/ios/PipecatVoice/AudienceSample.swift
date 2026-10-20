@@ -1,5 +1,5 @@
 #if DEBUG
-/// A request the SpellSpeak reference runtime rendered, with its ONNX Runtime answer
+/// A request the Audience reference runtime rendered, with its ONNX Runtime answer
 /// (tests/fixtures/audience/answers.json), for `--verify-audience`.
 enum AudienceSample {
     static let cards = ["Angel. role: angel; appearance: white robe, feathered wings and a golden halo", "Devil. role: devil; appearance: red skin, little horns and a pointy tail"]

@@ -1,4 +1,4 @@
-"""SpellSpeak Audience on Core ML: the native tokenizer and models against the reference runtime."""
+"""Pipecat Audience on Core ML: the native tokenizer and models against the reference runtime."""
 
 import re
 import subprocess

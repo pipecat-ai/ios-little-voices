@@ -1,8 +1,8 @@
 import CoreML
 import Foundation
 
-/// SpellSpeak Audience on Core ML: how likely a line is to be for each person present, whether it is unclear who it
-/// is for, and whether it is for the whole group. The Python side renders the request with the SpellSpeak reference
+/// Pipecat Audience on Core ML: how likely a line is to be for each person present, whether it is unclear who it
+/// is for, and whether it is for the whole group. The Python side renders the request with Audience's reference
 /// runtime (each card's text, the line's text, the features); this tokenizes and runs the encoder and the head as
 /// the runtime's cached-cards classifier does on ONNX Runtime. Each card is encoded once and kept by its text.
 /// Not thread-safe: the owner calls it from one queue.
@@ -200,7 +200,7 @@ final class AudienceModel: @unchecked Sendable {
 
 /// Runs Audience off the main actor, one request at a time, with the bundled models loaded on
 /// first use (or ahead of time with `prepare`). Models that fail to load are not retried until
-/// `unload`: each request fails at once, and Python reads the line with SpellSpeak's rules
+/// `unload`: each request fails at once, and Python reads the line with Audience's rules
 /// baseline instead.
 final class AudienceRunner: @unchecked Sendable {
     private let queue = DispatchQueue(label: "voice.audience", qos: .userInitiated)
@@ -231,7 +231,7 @@ final class AudienceRunner: @unchecked Sendable {
             queue.async { [self] in
                 let model = self.model ?? Result {
                     guard let directory = Bundle.main.url(forResource: "audience", withExtension: nil) else {
-                        throw VoiceError(message: "SpellSpeak Audience is missing from the app bundle.")
+                        throw VoiceError(message: "Pipecat Audience is missing from the app bundle.")
                     }
                     return try AudienceModel(directory: directory)
                 }

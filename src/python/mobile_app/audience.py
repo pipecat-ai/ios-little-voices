@@ -1,6 +1,6 @@
-"""SpellSpeak Audience in the conversation: who each line is for.
+"""Pipecat Audience in the conversation: who each line is for.
 
-Requests are built with the SpellSpeak reference runtime (`spellspeak_audience`) from the line, who said it, the
+Requests are built with Audience's reference runtime (`pipecat_audience`) from the line, who said it, the
 cards of everyone present and the recent lines; the host scores them on Core ML (the `audience` operation). When
 the host can't answer, the runtime's rules baseline does.
 """

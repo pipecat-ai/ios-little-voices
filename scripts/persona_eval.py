@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [
     str(ROOT / "src/python"),
-    str(ROOT / "src/python/spellspeak_audience/runtime"),
+    str(ROOT / "src/python/pipecat_audience/runtime"),
     str(ROOT / ".build/pipecat-ai"),
 ]
 

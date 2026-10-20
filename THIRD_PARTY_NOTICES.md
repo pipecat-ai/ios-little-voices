@@ -7,10 +7,12 @@ licence texts that several of them use are at the end.
 
 Phonon, the on-device text-to-speech model, is provided by [Gradium](https://gradium.ai).
 
-- The model and its voices are used under Gradium's terms, not this repository's licence.
-  The checkpoint is not in this repository: obtain it from Gradium and place it in
-  `models/phonon/`. The characters' voices are in `src/voices/`. App builds bundle the
-  checkpoint's weights, config and tokenizer with the voices.
+- The model is Phonon 31m ([`gradium/phonon-31m-en`](https://huggingface.co/gradium/phonon-31m-en)),
+  licensed under the Apache License, Version 2.0 (the text is below). It is not in this
+  repository: `scripts/download_models.py` downloads it into `models/phonon/`. App builds
+  bundle its weights, config and tokenizer, unmodified, with the characters' voices.
+- The characters' voices, in `src/voices/`, are used under Gradium's terms, not this
+  repository's licence.
 - Its runtime, Gradium's [`ptts`](https://github.com/gradium-ai/xn-ptts) crate, is licensed
   under MIT OR Apache-2.0. Cargo fetches it and the crates below from crates.io, and they are
   compiled into the app through `native/phonon-ffi`.
@@ -72,7 +74,7 @@ files carry (build-time procedural macros are not listed):
 | once_cell | 1.21.4 | MIT OR Apache-2.0 | — |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT | — |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 | Copyright 2019 The CryptoCorrosion Contributors; Copyright (c) 2019 The CryptoCorrosion Contributors |
-| ptts | 0.4.0-rc.1 | MIT OR Apache-2.0 | — |
+| ptts | 0.4.0 | MIT OR Apache-2.0 | — |
 | pulp | 0.22.3 | MIT | Copyright (c) 2021 sarah |
 | pulp-wasm-simd-flag | 0.1.1 | MIT | — |
 | rand | 0.9.5 | MIT OR Apache-2.0 | Copyright 2018 Developers of the Rand project; Copyright (c) 2014 The Rust Project Developers |
@@ -122,17 +124,17 @@ files carry (build-time procedural macros are not listed):
 | zerofrom | 0.1.8 | Unicode-3.0 | Copyright © 2020-2024 Unicode, Inc. |
 | zmij | 1.0.23 | MIT | — |
 
-## SpellSpeak Audience
+## Pipecat Audience
 
-SpellSpeak Audience, the model that reads who each line is for, is by SpellSpeak and is used
-under the Apache License, Version 2.0 (the text is in
-`src/python/spellspeak_audience/LICENSE`).
+Pipecat Audience, the model that reads who each line is for, is published by Pipecat AI
+([`pipecat-ai/audience`](https://huggingface.co/pipecat-ai/audience)) and is used under the
+Apache License, Version 2.0 (the text is in `src/python/pipecat_audience/LICENSE`).
 
 - Release rc2.1's request types, input rendering, rules of evidence, rules baseline and
-  features are included unmodified in `src/python/spellspeak_audience/runtime/`.
-- The model is not distributed in this repository. Its Core ML conversion goes in
-  `models/audience/`; app builds bundle the compiled models, its `tokenizer.json` and its
-  `config.json`.
+  features are included unmodified in `src/python/pipecat_audience/runtime/`.
+- The model is not distributed in this repository: `scripts/download_models.py` downloads
+  its Core ML package into `models/audience/`. App builds bundle the compiled models, its
+  `tokenizer.json` and its `config.json`.
 - Its base model is Ettin (`jhu-clsp/ettin-encoder-32m`), whose tokenizer is ModernBERT's,
   under the MIT License:
 
@@ -348,8 +350,8 @@ DEALINGS IN THE SOFTWARE.
 
 ### Apache License 2.0
 
-For `tokenizers`, `safetensors`, `esaxx-rs` and `spm_precompiled`, and for the crates offering
-it:
+For Phonon 31m, for `tokenizers`, `safetensors`, `esaxx-rs` and `spm_precompiled`, and for the
+crates offering it:
 
 ```text
                                  Apache License

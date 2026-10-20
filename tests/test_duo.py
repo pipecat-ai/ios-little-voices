@@ -1,9 +1,9 @@
-"""The angel and the devil: SpellSpeak Audience's requests, the director, and a debate end to end."""
+"""The angel and the devil: Pipecat Audience's requests, the director, and a debate end to end."""
 
 import hashlib
 
+import pipecat_audience
 import pytest
-import spellspeak_audience
 from contracts.schemas.addressee import AddresseeAnswer
 from mobile_app.audience import Audience, Line, addressees
 from mobile_app.duo import CAST, DEBATE_LINES, MAX_LINES, PLAYER_CARD, Exchange, Room, Take
@@ -18,8 +18,8 @@ def answer(angel=0.0, devil=0.0, *, unclear=0.0, group=0.0, player=None):
 
 
 def test_vendored_runtime_is_the_release_byte_for_byte():
-    for name, digest in spellspeak_audience.RUNTIME_SHA256.items():
-        data = (spellspeak_audience.RUNTIME / name).read_bytes()
+    for name, digest in pipecat_audience.RUNTIME_SHA256.items():
+        data = (pipecat_audience.RUNTIME / name).read_bytes()
         assert hashlib.sha256(data).hexdigest() == digest, name
 
 

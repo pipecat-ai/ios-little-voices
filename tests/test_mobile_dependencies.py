@@ -62,7 +62,7 @@ class AsBundled(importlib.abc.MetaPathFinder):
             raise ModuleNotFoundError('Module the app does not bundle imported: ' + fullname)
 sys.meta_path.insert(0, AsBundled())
 sys.path.insert(0, 'src/python')
-sys.path.insert(0, 'src/python/spellspeak_audience/runtime')
+sys.path.insert(0, 'src/python/pipecat_audience/runtime')
 sys.path.insert(0, '.build/pipecat-ai')
 from pipecat.workers.runner import WorkerRunner
 from mobile_app.bot import create_bot

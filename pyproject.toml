@@ -22,13 +22,13 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src/python", "src/python/spellspeak_audience/runtime", ".build/pipecat-ai", "scripts"]
+pythonpath = ["src/python", "src/python/pipecat_audience/runtime", ".build/pipecat-ai", "scripts"]
 asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["models", ".build", "Vendor", "src/python/spellspeak_audience/runtime"]
+extend-exclude = ["models", ".build", "Vendor", "src/python/pipecat_audience/runtime"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP"]

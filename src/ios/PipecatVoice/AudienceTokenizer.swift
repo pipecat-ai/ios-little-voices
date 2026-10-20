@@ -1,6 +1,6 @@
 import Foundation
 
-/// SpellSpeak Audience's tokenizer (`tokenizer.json`: byte-level BPE on the Ettin vocabulary), encoding as the
+/// Pipecat Audience's tokenizer (`tokenizer.json`: byte-level BPE on the Ettin vocabulary), encoding as the
 /// `tokenizers` library does, offsets included. Offsets count Unicode scalars, as Python counts characters, so the
 /// request's character spans from the Python runtime line up with the tokens. Inputs are expected in NFC, as the
 /// runtime renders them; the tokenizer's own normalizer is NFC too.
