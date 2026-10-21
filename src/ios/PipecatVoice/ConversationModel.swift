@@ -1106,6 +1106,10 @@ extension ConversationModel {
                   [(.laughTogether, 0.4)]),
         "handsome": ([ShowreelLine(character: .devil, text: "I must say, I do sound rather handsome. Devilishly handsome.")],
                      [(.eyeRoll(.angel), 0.2), (.look(.angel, .sideEye, seconds: 1.6), 1.1)]),
+        "snacks": ([ShowreelLine(character: .angel, text: "His snacks are a lie. Anyway, let's try this app out!")], []),
+        "audience": ([ShowreelLine(character: .angel,
+                                   text: "We use the Pipecat Audience model to work out which of us you're talking to.")],
+                     []),
     ]
 
     /// `--showreel [scene]`: once the intro has played and the voices have loaded, the angel and the
