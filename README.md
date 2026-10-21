@@ -1,8 +1,10 @@
-# Little Voices
+# Little Voices - On-device Voice Showcase
 
 An angel and a devil sit on your shoulders. Ask them anything out loud: they debate it, then
 each gives you a verdict, in their own voices, with faces that mouth their words. Everything
 runs on the iPhone: no server, no API keys, no network.
+
+![The launch screen; the devil scoffing at the angel's advice; a saved conversation](docs/screenshots.png)
 
 ## Models
 
