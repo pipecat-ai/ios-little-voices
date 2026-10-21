@@ -165,6 +165,10 @@ def main():
         "TARGETED_DEVICE_FAMILY": "1,2",
         "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
         "SUPPORTS_MACCATALYST": "NO",
+        # Not offered on Macs or Vision Pro, where the audio session and Apple Intelligence path
+        # are untested.
+        "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD": "NO",
+        "SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD": "NO",
         "CODE_SIGN_STYLE": "Automatic",
         "INFOPLIST_FILE": "src/ios/PipecatVoice/Info.plist",
         "GENERATE_INFOPLIST_FILE": "NO",
@@ -209,6 +213,9 @@ def main():
                     "SWIFT_OPTIMIZATION_LEVEL": "-Onone" if name == "Debug" else "-O",
                     "GCC_OPTIMIZATION_LEVEL": "0" if name == "Debug" else "s",
                     "DEBUG_INFORMATION_FORMAT": "dwarf" if name == "Debug" else "dwarf-with-dsym",
+                    # Whole-module Release builds inline across files in the real-time code.
+                    "SWIFT_COMPILATION_MODE": "singlefile" if name == "Debug" else "wholemodule",
+                    "VALIDATE_PRODUCT": "NO" if name == "Debug" else "YES",
                 }
             )
             values.append(
@@ -289,7 +296,7 @@ def main():
         "CFBundleShortVersionString": "$(MARKETING_VERSION)",
         "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "LSRequiresIPhoneOS": True,
-        "NSMicrophoneUsageDescription": "Little Voices uses your microphone for voice conversations.",
+        "NSMicrophoneUsageDescription": "Little Voices listens to your questions so the angel and the devil can answer. Your voice never leaves your device.",
         "NSSpeechRecognitionUsageDescription": "Little Voices transcribes your voice with Apple’s on-device speech recognition.",
         # The splash art, centred and unscaled: each idiom's image covers its largest screen.
         "UILaunchScreen": {

@@ -500,7 +500,7 @@ async def test_cancelled_native_request_cleans_up_operation():
 async def test_native_request_timeout_reports_operation_and_cancels_it():
     events = []
     bridge = AppleNativeBridge(events.append, timeout=0.01)
-    with pytest.raises(TimeoutError, match="Native speak timed out"):
+    with pytest.raises(TimeoutError, match="took too long to answer"):
         async for _ in bridge.stream("speak", "one"):
             pass
     assert bridge.pending == {}

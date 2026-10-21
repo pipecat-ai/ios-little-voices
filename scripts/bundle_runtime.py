@@ -68,7 +68,11 @@ def validate_staged_packages(*, root: Path = ROOT) -> None:
         )
 
 
-COPY_IGNORED = ("__pycache__", "*.pyc", ".DS_Store", "libpython*.dylib")
+COPY_IGNORED = (
+    *("__pycache__", "*.pyc", ".DS_Store", "libpython*.dylib"),
+    # Sources, stubs, docs and build records that nothing imports.
+    *("*.pyi", "*.c", "*.rst", "*.bat", "README.ctypes", "fetch_macholib", "sboms"),
+)
 # Standard-library modules the app never imports (check with PYTHON_MODULES, docs/native-tts.md).
 # The modules it does import reach these only from features it never calls (help(), breakpoint(),
 # FTP URLs, compressed logs, command-line interfaces), or import them only if they can (bz2, lzma).
@@ -267,8 +271,10 @@ def main():
             marker.write_text(str(executable.relative_to(bundle)) + "\n")
             (framework / f"{name}.origin").write_text(str(marker.relative_to(bundle)) + "\n")
             info = {
+                "CFBundleDevelopmentRegion": "en",
                 "CFBundleExecutable": name,
                 "CFBundleIdentifier": f"ai.pipecat.littlevoices.python.{name.replace('_', '-')}",
+                "CFBundleInfoDictionaryVersion": "6.0",
                 "CFBundleName": name,
                 "CFBundlePackageType": "FMWK",
                 "CFBundleShortVersionString": "1.0",

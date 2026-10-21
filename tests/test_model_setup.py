@@ -222,11 +222,13 @@ def test_the_privacy_manifest_declares_no_tracking_and_each_required_reason_api(
         for entry in manifest["NSPrivacyAccessedAPITypes"]
     }
     # Settings and the profile (UserDefaults), the stage's and the player's clocks (boot time),
-    # and the embedded Python runtime's module lookups (file timestamps).
+    # the embedded Python runtime's module lookups (file timestamps), and its `statfs`, which
+    # it links though the app never calls it (disk space).
     assert reasons == {
         "NSPrivacyAccessedAPICategoryUserDefaults": ["CA92.1"],
         "NSPrivacyAccessedAPICategorySystemBootTime": ["35F9.1"],
         "NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"],
+        "NSPrivacyAccessedAPICategoryDiskSpace": ["E174.1"],
     }
 
 

@@ -233,7 +233,9 @@ class AppleNativeBridge:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=self.timeout)
                 except TimeoutError as exc:
-                    raise TimeoutError(f"Native {operation} timed out. Please try again.") from exc
+                    raise TimeoutError(
+                        "The angel and the devil took too long to answer. Please try again."
+                    ) from exc
                 if event.get("error"):
                     raise RuntimeError(event["error"])
                 if event.get("done"):

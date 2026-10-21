@@ -43,6 +43,9 @@ enum HistoryChecks {
         later.heard(sentence: "Hi there.", line: 0, speaker: .devil, turn: "t1")
         reread.save(later.conversation)
         reread.delete([recorder.conversation.id])
+        // A conversation deleted while it goes on stays deleted when it is next saved.
+        reread.save(recorder.conversation)
+        precondition(reread.conversation(recorder.conversation.id) == nil)
         await reread.flush()
         let third = ConversationArchive(directory: directory)
         try await waitUntil { third.isLoaded }

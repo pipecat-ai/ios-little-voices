@@ -107,7 +107,7 @@ struct ConversationView: View {
             if let error = model.errorMessage { AccessibilityNotification.Announcement("Error: \(error)").post() }
         }
         .sheet(isPresented: $model.showSettings) { SettingsView(model: model) }
-        .sheet(isPresented: $showHistory) { HistoryView(archive: model.history, palette: palette) }
+        .sheet(isPresented: $showHistory) { HistoryView(archive: model.history, keeping: model.savesConversations, palette: palette) }
     }
 
     /// One VoiceOver container, read after the header and before the footer.
@@ -178,10 +178,10 @@ struct ConversationView: View {
         resetWipe = snapshot
     }
 
-    /// The dock, with the error banner above it while there is one.
+    /// The dock, with the error banner above it while there is one, once the welcome is dismissed.
     private var footer: some View {
         VStack(spacing: 10) {
-            if let error = model.errorMessage {
+            if let error = model.errorMessage, !showsWelcome {
                 errorBanner(error)
                     .transition(.asymmetric(insertion: reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity),
                                             removal: .opacity))
@@ -266,6 +266,11 @@ struct ConversationView: View {
         }
     }
 
+    /// The microphone has been refused, so the error offers the app's page in Settings.
+    private var microphoneDenied: Bool {
+        model.error != model.availability && AVAudioApplication.shared.recordPermission == .denied
+    }
+
     /// Its text stops growing at the captions' largest size, so it never crowds the stage.
     private func errorBanner(_ error: String) -> some View {
         let palette = palette, colors = palette.colors
@@ -284,6 +289,15 @@ struct ConversationView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Error")
             .accessibilityValue(error)
+            if microphoneDenied {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                .font(.subheadline.weight(.semibold)).fontDesign(.rounded)
+                .foregroundStyle(palette.color(colors.bannerText))
+                .padding(.horizontal, 6)
+                .frame(minHeight: 44)
+            }
             Button { model.error = nil } label: {
                 Image(systemName: "xmark")
                     .font(.footnote.weight(.bold))
@@ -410,6 +424,7 @@ private struct SettingsView: View {
                            url: "https://pipecat.ai")
                     credit("Gradium", detail: "Speech by Phonon, Gradium’s on-device text-to-speech model.",
                            url: "https://gradium.ai")
+                    NavigationLink("Acknowledgements") { AcknowledgementsView() }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
             }.navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)

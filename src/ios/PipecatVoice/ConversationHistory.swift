@@ -95,6 +95,8 @@ final class ConversationArchive {
     private(set) var isLoaded = false
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let queue = DispatchQueue(label: "ai.pipecat.littlevoices.history", qos: .utility)
+    /// Conversations deleted while still going on, which their next save must not bring back.
+    @ObservationIgnored private var deleted: Set<UUID> = []
 
     nonisolated static var defaultDirectory: URL {
         URL.applicationSupportDirectory.appending(path: "Conversations", directoryHint: .isDirectory)
@@ -110,9 +112,9 @@ final class ConversationArchive {
 
     func conversation(_ id: UUID) -> SavedConversation? { conversations.first { $0.id == id } }
 
-    /// Keeps `conversation`, or its latest version; one with nothing said is not kept.
+    /// Keeps `conversation`, or its latest version; one with nothing said, or deleted, is not kept.
     func save(_ conversation: SavedConversation) {
-        guard !conversation.entries.isEmpty else { return }
+        guard !conversation.entries.isEmpty, !deleted.contains(conversation.id) else { return }
         if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
             guard conversations[index] != conversation else { return }
             conversations[index] = conversation
@@ -135,6 +137,7 @@ final class ConversationArchive {
 
     func delete(_ ids: some Sequence<UUID>) {
         let ids = Set(ids)
+        deleted.formUnion(ids)
         conversations.removeAll { ids.contains($0.id) }
         queue.async { [directory] in
             for id in ids { try? FileManager.default.removeItem(at: Self.file(for: id, in: directory)) }
@@ -142,6 +145,7 @@ final class ConversationArchive {
     }
 
     func deleteAll() {
+        deleted.formUnion(conversations.map(\.id))
         conversations.removeAll()
         queue.async { [directory] in try? FileManager.default.removeItem(at: directory) }
     }
@@ -162,8 +166,8 @@ final class ConversationArchive {
         directory.appending(path: "\(id.uuidString).json")
     }
 
+    /// Creates the folder if need be, and keeps it out of backups.
     private nonisolated static func prepare(_ directory: URL) throws {
-        guard !FileManager.default.fileExists(atPath: directory.path) else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         var url = directory
         var values = URLResourceValues()

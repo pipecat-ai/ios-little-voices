@@ -4,6 +4,8 @@ import SwiftUI
 /// they can be deleted one at a time, by swiping or from the chat.
 struct HistoryView: View {
     let archive: ConversationArchive
+    /// New conversations are being kept, from Settings.
+    let keeping: Bool
     let palette: StagePalette
     @Environment(\.dismiss) private var dismiss
     @State private var path: [UUID] = []
@@ -15,7 +17,8 @@ struct HistoryView: View {
                     ContentUnavailableView {
                         Label("No conversations yet", systemImage: "bubble.left.and.bubble.right")
                     } description: {
-                        Text("Your conversations with the angel and the devil appear here.")
+                        Text(keeping ? "Your conversations with the angel and the devil appear here."
+                                     : "Keep conversations is off in Settings, so conversations aren’t saved.")
                     }
                 } else {
                     List {

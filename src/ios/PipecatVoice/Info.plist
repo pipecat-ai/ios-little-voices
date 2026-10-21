@@ -27,7 +27,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Little Voices uses your microphone for voice conversations.</string>
+	<string>Little Voices listens to your questions so the angel and the devil can answer. Your voice never leaves your device.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Little Voices transcribes your voice with Apple’s on-device speech recognition.</string>
 	<key>UILaunchScreen</key>

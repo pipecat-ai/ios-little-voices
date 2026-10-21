@@ -168,7 +168,9 @@ final class AudienceModel: @unchecked Sendable {
     }
 
     private func array<Scalar>(_ shape: [Int], _ values: [Scalar]) throws -> MLMultiArray {
-        precondition(shape.reduce(1, *) == values.count, "Audience input of the wrong size")
+        guard shape.reduce(1, *) == values.count else {
+            throw VoiceError(message: "Audience was given \(values.count) values for shape \(shape).")
+        }
         precondition(Scalar.self == Float.self || Scalar.self == Int32.self, "Audience inputs are Float or Int32")
         let type: MLMultiArrayDataType = Scalar.self == Int32.self ? .int32 : .float32
         let array = try MLMultiArray(shape: shape.map { NSNumber(value: $0) }, dataType: type)

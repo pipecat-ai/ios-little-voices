@@ -355,6 +355,7 @@ final class ConversationModel {
     func introEnded() {
         guard awaitingIntro else { return }
         awaitingIntro = false
+        refreshAvailability()
         if inFront { warmUp() }
     }
 
@@ -383,9 +384,13 @@ final class ConversationModel {
         }
     }
 
-    /// Check again whether the language model can be used.
+    /// Check again whether the language model can be used. Once the intro has played, the banner
+    /// says why it can't before the microphone is pressed, and clears once it can.
     private func refreshAvailability() {
+        let previous = availability
         availability = languageModel.unavailableReason
+        if let previous, error == previous, availability != previous { error = nil }
+        if !awaitingIntro, !active, error == nil, let availability { error = availability }
     }
 
     /// The voices, Audience and speech recognition, loading or loaded. Only Phonon failing fails
@@ -646,6 +651,15 @@ final class ConversationModel {
         send(["type": "reset"])
     }
 
+    /// A fault in the app itself: its detail in Debug builds, a way forward in Release.
+    private static func developerError(_ detail: String) -> String {
+        #if DEBUG
+        detail
+        #else
+        "Something went wrong. Tap the microphone to start again."
+        #endif
+    }
+
     private func fail(_ message: String) {
         #if DEBUG
         print("CONVERSATION_FAILED: \(message)")
@@ -774,7 +788,7 @@ final class ConversationModel {
             return
         }
         guard let event = try? JSONDecoder().decode(NativeEvent.self, from: data) else {
-            fail("The Python bridge returned an invalid event.")
+            fail(Self.developerError("The Python bridge returned an invalid event."))
             return
         }
         if event.type != "request", let session = event.session,
@@ -839,7 +853,7 @@ final class ConversationModel {
                 return
             }
             perform(event)
-        default: fail("Unknown Python event: \(event.type)")
+        default: fail(Self.developerError("Unknown Python event: \(event.type)"))
         }
     }
 

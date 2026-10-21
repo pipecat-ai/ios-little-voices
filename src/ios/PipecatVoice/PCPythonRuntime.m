@@ -1,5 +1,6 @@
 #import "PCPythonRuntime.h"
 #import <NaturalLanguage/NaturalLanguage.h>
+#import <os/log.h>
 #include <Python/Python.h>
 
 static NSLock *inboxLock;
@@ -28,7 +29,12 @@ static PyObject *native_poll(PyObject *self, PyObject *args) {
 static PyObject *native_log(PyObject *self, PyObject *args) {
     const char *message;
     if (!PyArg_ParseTuple(args, "s", &message)) return NULL;
+#if DEBUG
     NSLog(@"Pipecat: %s", message);
+#else
+    // Pipecat's messages can quote what the user said, so Release logs keep them private.
+    os_log_error(OS_LOG_DEFAULT, "Pipecat: %{private}s", message);
+#endif
     Py_RETURN_NONE;
 }
 

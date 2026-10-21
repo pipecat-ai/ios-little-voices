@@ -13,7 +13,13 @@ def run():
     from .bot import create_bot
 
     logger.remove()
-    logger.add(lambda message: _pipecat_native.log(str(message)), level="WARNING")
+    # Warnings without tracebacks' variable values, which can hold what the user said.
+    logger.add(
+        lambda message: _pipecat_native.log(str(message)),
+        level="WARNING",
+        backtrace=False,
+        diagnose=False,
+    )
 
     async def main():
         bridge = AppleNativeBridge(lambda event: _pipecat_native.emit(json.dumps(event)))
@@ -30,7 +36,13 @@ def run():
                     continue
                 try:
                     await bridge.receive(json.loads(raw))
-                except Exception as exc:
-                    bridge.emit({"type": "error", "message": str(exc)})
+                except Exception:
+                    logger.exception("Native event failed")
+                    bridge.emit(
+                        {
+                            "type": "error",
+                            "message": "Something went wrong. Tap the microphone to start again.",
+                        }
+                    )
 
     asyncio.run(main())
