@@ -48,6 +48,9 @@ final class VoiceAudioEngine {
             }
             try session.setCategory(.playAndRecord, mode: .default,
                                     options: [.defaultToSpeaker, .allowBluetoothHFP])
+            // iOS silences haptics while a session records, and the microphone's taps and clicks
+            // come while it does.
+            try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
             try restoreInput(selectedInput, in: session)
             if selectedInput == nil { prefer(preferred, in: session) }
             if session.isEchoCancelledInputAvailable {
