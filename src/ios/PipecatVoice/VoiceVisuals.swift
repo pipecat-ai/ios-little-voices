@@ -651,7 +651,7 @@ struct IntroLogo: View {
         let drop = shown ? Animation.spring(response: 0.6, dampingFraction: 0.55) : exit
         let fade = shown ? Animation.easeOut(duration: reduceMotion ? 0.3 : 0.15) : exit
         GeometryReader { proxy in
-            let width = min(proxy.size.width * 0.98, 520)
+            let width = min(proxy.size.width * 0.9, 480)
             ZStack {
                 Ellipse()
                     .fill(EllipticalGradient(colors: [Self.glow.opacity(0.9), Self.glow.opacity(0.55), Self.glow.opacity(0)],

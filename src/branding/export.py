@@ -180,6 +180,8 @@ def main() -> None:
     image = extend(art, (side, side), ((side - w) // 2, (side - h) // 2, w, h))
     save(image, launch / "LaunchSplash-iPad@2x.png", profile)
     logo = transparent(Image.open(HERE / "logo.png"))
+    # The cut-out's faint haze reaches the image's edges; dropped, the crop centres the art.
+    logo.putalpha(logo.getchannel("A").point(lambda a: 0 if a < 16 else a))
     logo = logo.crop(logo.getchannel("A").getbbox())
     images = ASSETS / "Logo.imageset"
     for scale in (2, 3):
